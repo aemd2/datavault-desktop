@@ -1,0 +1,32 @@
+# Supabase local / deploy config. Set project ref via `supabase link` (do not commit secrets).
+
+[api]
+enabled = true
+
+[functions.notion-oauth]
+# OAuth callback is called by Notion's redirect without a user JWT.
+verify_jwt = false
+
+[functions.stripe-webhook]
+# Stripe signs the body; no Supabase JWT on the request.
+verify_jwt = false
+
+[functions.scheduled-sync]
+# Invoked by pg_cron or external scheduler with a shared secret header.
+verify_jwt = false
+
+[functions.run-sync]
+# Authenticated user triggers sync; we verify JWT manually inside to read the connector token.
+verify_jwt = false
+
+[functions.cancel-sync]
+# User stops a queued or running backup; JWT verified inside.
+verify_jwt = false
+
+[functions.create-checkout-session]
+# User must be authenticated; Supabase JWT is verified.
+verify_jwt = true
+
+[functions.create-portal-session]
+# User must be authenticated; Supabase JWT is verified.
+verify_jwt = true

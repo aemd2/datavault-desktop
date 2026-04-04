@@ -1,0 +1,17 @@
+# docker-compose for local development of the DataVault sync engine.
+# Copy .env.example to .env and fill in your values before running.
+#
+# Usage:
+#   Full sync:         docker-compose run --rm sync python -m sync_engine sync
+#   Incremental sync:  docker-compose run --rm sync python -m sync_engine sync --incremental
+#   Shell inside:      docker-compose run --rm sync bash
+
+services:
+  sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file: .env
+    # Default command runs a full sync once and exits.
+    # Override at runtime for incremental: --incremental
+    command: python -m sync_engine sync

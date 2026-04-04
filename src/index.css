@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:wght@700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 4%;
+    --foreground: 40 20% 95%;
+    --card: 220 15% 7%;
+    --card-foreground: 40 20% 95%;
+    --popover: 220 15% 7%;
+    --popover-foreground: 40 20% 95%;
+    --primary: 40 80% 55%;
+    --primary-foreground: 220 20% 4%;
+    --secondary: 220 10% 12%;
+    --secondary-foreground: 40 20% 95%;
+    --muted: 220 10% 14%;
+    --muted-foreground: 220 10% 50%;
+    --accent: 40 80% 55%;
+    --accent-foreground: 220 20% 4%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 40 20% 95%;
+    --border: 220 15% 14%;
+    --input: 220 15% 14%;
+    --ring: 40 80% 55%;
+    --radius: 0.75rem;
+    --surface: 220 15% 7%;
+
+    --gold-start: 35 90% 58%;
+    --gold-end: 45 85% 48%;
+
+    --sidebar-background: 220 15% 7%;
+    --sidebar-foreground: 40 20% 95%;
+    --sidebar-primary: 40 80% 55%;
+    --sidebar-primary-foreground: 220 20% 4%;
+    --sidebar-accent: 220 10% 12%;
+    --sidebar-accent-foreground: 40 20% 95%;
+    --sidebar-border: 220 15% 14%;
+    --sidebar-ring: 40 80% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  ::selection {
+    background: hsl(40 80% 55% / 0.25);
+  }
+}
+
+@layer utilities {
+  .text-gradient-gold {
+    background: linear-gradient(135deg, hsl(35 90% 62%), hsl(40 80% 55%), hsl(30 85% 48%));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .bg-gradient-gold {
+    background: linear-gradient(135deg, hsl(35 90% 58%), hsl(45 85% 48%));
+  }
+  .bg-gradient-gold-hover {
+    background: linear-gradient(135deg, hsl(35 90% 62%), hsl(45 85% 52%));
+  }
+  .border-gradient-gold {
+    border-image: linear-gradient(135deg, hsl(35 90% 58% / 0.4), hsl(45 85% 48% / 0.1)) 1;
+  }
+  .glass-card {
+    background: linear-gradient(135deg, hsl(220 15% 8% / 0.8), hsl(220 15% 6% / 0.9));
+    backdrop-filter: blur(20px);
+    box-shadow:
+      0 0 0 1px hsl(40 80% 55% / 0.06),
+      0 1px 0 0 hsl(40 80% 55% / 0.03) inset,
+      0 20px 40px -12px hsl(220 20% 2% / 0.5);
+  }
+  .glass-card-hover:hover {
+    box-shadow:
+      0 0 0 1px hsl(40 80% 55% / 0.12),
+      0 1px 0 0 hsl(40 80% 55% / 0.06) inset,
+      0 24px 48px -12px hsl(220 20% 2% / 0.6);
+  }
+  .glow-sm {
+    box-shadow: 0 0 20px hsl(40 80% 55% / 0.08);
+  }
+  .font-display {
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+  .shine {
+    position: relative;
+    overflow: hidden;
+  }
+  .shine::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, hsl(40 80% 55% / 0.06), transparent);
+    animation: shine 4s ease-in-out infinite;
+  }
+  @keyframes shine {
+    0%, 100% { left: -100%; }
+    50% { left: 150%; }
+  }
+}

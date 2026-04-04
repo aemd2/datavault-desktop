@@ -1,0 +1,49 @@
+appId: com.datafreedomhub.datavault
+productName: DataVault
+copyright: Copyright © 2024 Data Freedom Hub
+
+directories:
+  output: release
+  buildResources: build-resources
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - arm64
+  icon: build-resources/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+  # electron-builder converts icon.png → .icns automatically when building on macOS
+  icon: build-resources/icon.png
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build-resources/entitlements.mac.plist
+  entitlementsInherit: build-resources/entitlements.mac.plist
+
+dmg:
+  sign: false
+
+publish:
+  provider: github
+  releaseType: release

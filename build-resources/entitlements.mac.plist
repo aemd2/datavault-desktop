@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- No special entitlements needed — DataVault is a local-only app with no network access -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <false/>
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <false/>
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <false/>
+  <!-- Required for native Node modules (.node files) -->
+  <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+  <false/>
+</dict>
+</plist>
