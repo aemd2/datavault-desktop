@@ -1,47 +1,52 @@
 # DataVault Desktop
 
-Your Notion data, on your computer, forever.
+**Your Notion data, on your computer, forever.**
 
-DataVault syncs your Notion workspace to local files (Markdown + CSV) and lets you browse them offline. Open source, privacy-first.
+DataVault is an open-source desktop app that syncs your Notion workspace to local files and lets you browse them offline. Your data stays on your machine — no cloud storage, no vendor lock-in.
 
-## Download
-
-Go to [Releases](https://github.com/aemd2/datavault-desktop/releases) and download the installer for your platform:
-
-- **Windows**: `.exe` installer
-- **macOS**: `.dmg` disk image
+> **Status: Pre-release** — the app works but installers are not yet available. You can run it from source (see Development below).
 
 ## Features
 
 - **One-click Notion sync** — OAuth login, no API tokens to copy
-- **Real files** — pages become Markdown, databases become CSV + JSON
+- **Real files** — pages become Markdown, databases become CSV/JSON
 - **Offline viewer** — browse your pages and tables without Notion
-- **Automatic backups** — schedule syncs so your data stays fresh
-- **Privacy-first** — your data lives on your machine, encrypted at rest
+- **Privacy-first** — your data lives on your machine, not ours
 
-## Development
+## Run from source
 
 ```bash
-# Install dependencies
+# Clone and install
+git clone https://github.com/aemd2/datavault-desktop.git
+cd datavault-desktop
 npm install
 
-# Run the desktop app (Electron + Vite)
+# Start the app
 npm run dev:electron
+```
 
-# Build installer
+Requires: Node.js 18+ and npm.
+
+## Build installers
+
+```bash
 npm run dist        # both platforms
-npm run dist:win    # Windows only
-npm run dist:mac    # macOS only
+npm run dist:win    # Windows .exe
+npm run dist:mac    # macOS .dmg
 ```
 
 ## Architecture
 
 ```
-electron/       Electron main process (protocol handler, CSP, IPC)
-src/            React app (Login, Dashboard, Viewer, Billing)
-supabase/       Edge Functions (Notion OAuth, sync runner, Stripe)
-sync-engine/    Python CLI for full/incremental Notion sync
+electron/       Main process — window, protocol handler, CSP, IPC
+src/            React app — Login, Dashboard, Viewer
+supabase/       Edge Functions — Notion OAuth, sync runner (deployed separately)
 ```
+
+## Links
+
+- **Website & waitlist:** [data-freedom-hub](https://github.com/aemd2/data-freedom-hub)
+- **Issues:** [Report a bug](https://github.com/aemd2/datavault-desktop/issues)
 
 ## License
 
