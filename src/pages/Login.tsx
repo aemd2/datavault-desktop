@@ -86,7 +86,7 @@ const Login = () => {
     // In Electron the app is loaded from file:// so we use a custom protocol URL
     // for the magic-link redirect. The DeepLinkHandler in App.tsx processes it.
     
-    const redirectTo = isElectron
+    const redirectTo = true // always Electron in this repo
       ? "datavault://auth/callback"
       : `${window.location.origin}/dashboard`;
 
