@@ -2,7 +2,7 @@
   "name": "data-freedom-hub",
   "productName": "DataVault",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Open-source local-first personal data manager. Own your data.",
   "author": "Data Freedom Hub",
   "license": "MIT",

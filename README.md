@@ -4,7 +4,7 @@
 
 DataVault is an open-source desktop app that syncs your Notion workspace to local files and lets you browse them offline. Your data stays on your machine — no cloud storage, no vendor lock-in.
 
-> **Status: Pre-release** — the app works but installers are not yet available. You can run it from source (see Development below).
+> **Version 1.0.0** — run from source or build your own installer (see below).
 
 ## Features
 
