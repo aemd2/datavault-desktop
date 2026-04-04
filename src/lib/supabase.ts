@@ -1,22 +1,39 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-/**
- * Supabase client for the browser.
- * Uses anon key so we can enforce Row Level Security (RLS) in Supabase.
- * Required env: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
- */
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    "Supabase env missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env for waitlist to work."
-  );
-}
-
-export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
-
-/** Check if Supabase is configured (so we can show a fallback or error in the form). */
+/** True when the app was built with Supabase credentials. */
 export function isSupabaseConfigured(): boolean {
   return Boolean(supabaseUrl && supabaseAnonKey);
 }
+
+/**
+ * Lazy Supabase client — only created when credentials are present.
+ * The desktop app works fully offline/locally without them.
+ */
+let _client: SupabaseClient | null = null;
+
+export function getSupabaseClient(): SupabaseClient | null {
+  if (!isSupabaseConfigured()) return null;
+  if (!_client) {
+    _client = createClient(supabaseUrl!, supabaseAnonKey!);
+  }
+  return _client;
+}
+
+/**
+ * Direct client export for code that imports `supabase` directly.
+ * Returns a real client if configured, otherwise a no-op proxy that
+ * won't crash the app — it just returns empty data.
+ */
+export const supabase = new Proxy({} as SupabaseClient, {
+  get(_target, prop) {
+    const client = getSupabaseClient();
+    if (client) return (client as any)[prop];
+    // Return a chainable no-op so the app doesn't crash without credentials
+    const noop: any = () => noop;
+    noop.then = () => Promise.resolve({ data: null, error: new Error("Supabase not configured") });
+    return noop;
+  },
+});
