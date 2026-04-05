@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 // Public anon key — safe to ship in the app bundle.
 // These are the same credentials used by the DataVault website.
 // RLS (Row Level Security) in Supabase ensures users can only access their own data.
-const SUPABASE_URL =
+export const SUPABASE_URL =
   (import.meta.env.VITE_SUPABASE_URL as string | undefined) ??
   "https://gfiugqsqfuphqvyxojtg.supabase.co";
 
