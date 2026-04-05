@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { friendlyQueueSyncError, friendlyChunkError } from "@/lib/friendlySyncErrors";
 
-const RUN_SYNC_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/run-sync`;
+const RUN_SYNC_URL = `${SUPABASE_URL}/functions/v1/run-sync`;
 
 /** Backoff schedule for network retries between chunks (ms). */
 const CHUNK_RETRY_DELAYS = [3_000, 6_000, 10_000];
@@ -25,16 +25,19 @@ interface ChunkResponse {
   db_count?: number;
   row_count?: number;
   skip_count?: number;
+  comment_count?: number;
   seen_page_ids?: string[];
   seen_db_ids?: string[];
   force?: boolean;
   total_items?: number;
   count_complete?: boolean;
+  users_fetched?: boolean;
   error?: string;
   pages?: number;
   databases?: number;
   rows?: number;
   skipped?: number;
+  comments?: number;
   /** True when run-sync is in local-first vault mode (DATAVAULT_STORE_FULL_PAYLOAD=false).
    *  Page bodies are in Storage, not in notion_pages.raw_json. */
   vault_pages_in_storage?: boolean;
@@ -48,11 +51,13 @@ interface ChunkParams {
   db_count?: number;
   row_count?: number;
   skip_count?: number;
+  comment_count?: number;
   seen_page_ids?: string[];
   seen_db_ids?: string[];
   force?: boolean;
   total_items?: number;
   count_complete?: boolean;
+  users_fetched?: boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -123,10 +128,12 @@ async function runSyncChain(
       queryClient.invalidateQueries({ queryKey: ["sync_jobs"] });
       queryClient.invalidateQueries({ queryKey: ["notion-pages"] });
       queryClient.invalidateQueries({ queryKey: ["notion-databases"] });
+      queryClient.invalidateQueries({ queryKey: ["notion-comments"] });
       const parts = [
         result.pages ? `${result.pages} pages` : null,
         result.databases ? `${result.databases} tables` : null,
         result.rows ? `${result.rows} rows` : null,
+        result.comments ? `${result.comments} comments` : null,
         result.skipped ? `${result.skipped} unchanged` : null,
       ].filter(Boolean).join(", ");
       const baseMsg = parts ? `Backup complete — ${parts}.` : "Backup complete.";
@@ -170,11 +177,13 @@ async function runSyncChain(
         db_count: result.db_count,
         row_count: result.row_count,
         skip_count: result.skip_count,
+        comment_count: result.comment_count,
         seen_page_ids: result.seen_page_ids,
         seen_db_ids: result.seen_db_ids,
         force: result.force || undefined,
         total_items: result.total_items,
         count_complete: result.count_complete,
+        users_fetched: result.users_fetched,
       };
       continue;
     }
