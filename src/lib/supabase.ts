@@ -1,28 +1,31 @@
 import { createClient } from "@supabase/supabase-js";
 
 /**
- * Supabase client for the browser.
- * Uses anon key so we can enforce Row Level Security (RLS) in Supabase.
- * Required env: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+ * Supabase client for the browser / Electron renderer.
+ * Uses anon key so RLS policies protect all data.
+ *
+ * Priority: VITE_* env vars (set via .env for local dev) →
+ *   hardcoded project fallbacks (safe for desktop builds that
+ *   have no .env — anon key is public by design, RLS is the gate).
  */
+
+// Anon key is intentionally public — it only enables what RLS allows.
+const FALLBACK_URL  = "https://gfiugqsqfuphqvyxojtg.supabase.co";
+const FALLBACK_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmaXVncXNxZnVwaHF2eXhvanRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NTAwNjksImV4cCI6MjA4OTIyNjA2OX0.VdqzynoZ_wVjA6chnAvYPINZJQ4BRsQ0mupY0VCS_o8";
+
 /**
- * Supabase project URL — used by all hooks that call Edge Functions.
- * Exported so hooks import this instead of repeating import.meta.env lookups.
+ * Supabase project URL — exported so all hooks that call Edge Functions
+ * import this instead of repeating import.meta.env lookups.
  */
-export const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL ?? "";
+export const SUPABASE_URL: string =
+  (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? FALLBACK_URL;
 
-const supabaseUrl = SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseAnonKey: string =
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? FALLBACK_ANON;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn(
-    "Supabase env missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env for waitlist to work."
-  );
-}
+export const supabase = createClient(SUPABASE_URL, supabaseAnonKey);
 
-export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
-
-/** Check if Supabase is configured (so we can show a fallback or error in the form). */
+/** Check if Supabase is configured (anon key present). */
 export function isSupabaseConfigured(): boolean {
-  return Boolean(supabaseUrl && supabaseAnonKey);
+  return Boolean(SUPABASE_URL && supabaseAnonKey);
 }
