@@ -133,7 +133,6 @@ async function runSyncChain(
         result.pages ? `${result.pages} pages` : null,
         result.databases ? `${result.databases} tables` : null,
         result.rows ? `${result.rows} rows` : null,
-        result.comments ? `${result.comments} comments` : null,
         result.skipped ? `${result.skipped} unchanged` : null,
       ].filter(Boolean).join(", ");
       const baseMsg = parts ? `Backup complete — ${parts}.` : "Backup complete.";

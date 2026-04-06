@@ -1,18 +1,28 @@
 import { createClient } from "@supabase/supabase-js";
 
-// Public anon key — safe to ship in the app bundle.
-// These are the same credentials used by the DataVault website.
-// RLS (Row Level Security) in Supabase ensures users can only access their own data.
-export const SUPABASE_URL =
-  (import.meta.env.VITE_SUPABASE_URL as string | undefined) ??
-  "https://gfiugqsqfuphqvyxojtg.supabase.co";
+/**
+ * Supabase client for the browser.
+ * Uses anon key so we can enforce Row Level Security (RLS) in Supabase.
+ * Required env: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY
+ */
+/**
+ * Supabase project URL — used by all hooks that call Edge Functions.
+ * Exported so hooks import this instead of repeating import.meta.env lookups.
+ */
+export const SUPABASE_URL: string = import.meta.env.VITE_SUPABASE_URL ?? "";
 
-const SUPABASE_ANON_KEY =
-  (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdmaXVncXNxZnVwaHF2eXhvanRnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NTAwNjksImV4cCI6MjA4OTIyNjA2OX0.VdqzynoZ_wVjA6chnAvYPINZJQ4BRsQ0mupY0VCS_o8";
+const supabaseUrl = SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn(
+    "Supabase env missing. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to .env for waitlist to work."
+  );
+}
 
+export const supabase = createClient(supabaseUrl ?? "", supabaseAnonKey ?? "");
+
+/** Check if Supabase is configured (so we can show a fallback or error in the form). */
 export function isSupabaseConfigured(): boolean {
-  return true;
+  return Boolean(supabaseUrl && supabaseAnonKey);
 }

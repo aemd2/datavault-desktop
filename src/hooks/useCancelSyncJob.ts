@@ -1,9 +1,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { friendlyQueueSyncError } from "@/lib/friendlySyncErrors";
 
-const CANCEL_SYNC_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/cancel-sync`;
+const CANCEL_SYNC_URL = `${SUPABASE_URL}/functions/v1/cancel-sync`;
 
 /**
  * Stop a queued or running backup for the current user.

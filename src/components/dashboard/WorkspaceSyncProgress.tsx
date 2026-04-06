@@ -135,6 +135,7 @@ export function WorkspaceSyncProgress({ job, otherActiveBackupCount }: Workspace
                   onClick={() =>
                     cancelJob(job.id, {
                       onSuccess: () => setStopOpen(false),
+                      onError: () => setStopOpen(false),
                     })
                   }
                 >

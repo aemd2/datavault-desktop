@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AuthGuard } from "@/components/AuthGuard";
@@ -53,7 +53,7 @@ async function startNotionOAuth() {
   const jwt = data.session?.access_token;
   if (!jwt) return;
   // Pass the JWT as ?token= so the Edge Function can encode it as OAuth state.
-  const oauthUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notion-oauth?action=start&token=${encodeURIComponent(jwt)}`;
+  const oauthUrl = `${SUPABASE_URL}/functions/v1/notion-oauth?action=start&token=${encodeURIComponent(jwt)}`;
 
   const isElectron = typeof window !== "undefined" && "electronAPI" in window;
   if (isElectron && window.electronAPI?.openExternal) {
@@ -95,6 +95,18 @@ const DashboardInner = () => {
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [queryClient]);
+
+  // In Electron, poll for new connectors when none exist yet (user is completing OAuth in browser).
+  // Stops polling once a connector appears or on non-Electron platforms.
+  useEffect(() => {
+    const isElectron = typeof window !== "undefined" && "electronAPI" in window;
+    if (!isElectron || connectors.length > 0) return;
+
+    const id = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ["connectors"] });
+    }, 3_000);
+    return () => window.clearInterval(id);
+  }, [connectors.length, queryClient]);
 
   const connectorLabel = (connectorId: string) =>
     connectors.find((c) => c.id === connectorId)?.workspace_name ?? "Your workspace";

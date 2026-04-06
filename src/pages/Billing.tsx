@@ -5,11 +5,11 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useSubscription } from "@/hooks/useSubscription";
 
 /** Base URL for Supabase Edge Functions. */
-const FN_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+const FN_BASE = `${SUPABASE_URL}/functions/v1`;
 
 /** Plan definitions matching PRD pricing. */
 const PLANS = [
