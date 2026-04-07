@@ -1,7 +1,8 @@
 import { useId, useState } from "react";
-import { Link, Outlet, useMatch, useNavigate } from "react-router-dom";
-import { ArrowLeft, BookOpen } from "lucide-react";
+import { Link, Outlet, useMatch } from "react-router-dom";
+import { BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppTopNav } from "@/components/AppTopNav";
 import { Label } from "@/components/ui/label";
 import { PageSidebarTree } from "@/components/viewer/PageSidebarTree";
 import { DownloadBackupButton } from "@/components/viewer/DownloadBackupButton";
@@ -14,7 +15,6 @@ import type { ViewerOutletContext } from "@/pages/viewerTypes";
  * Shell for /viewer/* — workspace picker, download, sidebar tree, and nested routes.
  */
 export function ViewerLayout() {
-  const navigate = useNavigate();
   const workspaceSelectId = useId();
   const [selectedConnector, setSelectedConnector] = useState<string | undefined>(undefined);
   const { data: connectors = [], isLoading: loadingConnectors } = useConnectors();
@@ -30,29 +30,18 @@ export function ViewerLayout() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="border-b border-border/80 bg-card/30 shrink-0">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-3 min-w-0 flex-wrap">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/dashboard")}
-              className="gap-1.5 shrink-0"
-            >
-              <ArrowLeft className="w-4 h-4" aria-hidden />
-              Back to dashboard
-            </Button>
-            <div className="w-px h-4 bg-border hidden sm:block" aria-hidden />
-            <div className="min-w-0">
-              <h1 className="font-display text-xl font-bold truncate">
-                <span className="text-foreground">Browse your backup</span>
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                {isLocalFirstVault()
-                  ? "Read-only outline — page text lives in your vault, download the ZIP to read offline"
-                  : "Read-only — layout and images match your last sync"}
-              </p>
-            </div>
+      <AppTopNav active="viewer" />
+
+      {/* Viewer tools: same sub-bar pattern as before, under the shared app chrome. */}
+      <div className="border-b border-border/80 bg-card/20 shrink-0">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="font-display text-xl font-bold text-foreground truncate">Browse your backup</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isLocalFirstVault()
+                ? "Read-only outline — page text lives in your vault, download the ZIP to read offline"
+                : "Read-only — layout and images match your last sync"}
+            </p>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -83,7 +72,7 @@ export function ViewerLayout() {
             />
           </div>
         </div>
-      </header>
+      </div>
 
       <div className="flex-1 max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 flex flex-col lg:flex-row gap-8 min-h-0">
         {loadingConnectors ? (

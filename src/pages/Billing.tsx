@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { AuthGuard } from "@/components/AuthGuard";
+import { AppTopNav } from "@/components/AppTopNav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -11,49 +11,53 @@ import { useSubscription } from "@/hooks/useSubscription";
 /** Base URL for Supabase Edge Functions. */
 const FN_BASE = `${SUPABASE_URL}/functions/v1`;
 
-/** Plan definitions matching PRD pricing. */
+/**
+ * Plan definitions aligned with PRD §5 (Free) and Phase 1 scope.
+ * Only the Free tier is available in-app today; paid tiers are roadmap (Coming soon).
+ */
 const PLANS = [
   {
     id: "free",
     name: "Free",
     price: "€0",
     period: "forever",
+    comingSoon: false,
     features: [
-      "1 Notion workspace",
-      "Up to 500 pages synced",
-      "Manual sync via CLI or dashboard",
-      "Open-source sync engine",
-      "Self-host anywhere",
+      "1 Notion workspace (OAuth)",
+      "Up to 1,000 pages synced",
+      "Local vault: Markdown pages + JSON/CSV databases",
+      "Optional sync to your Postgres (BYO) with relationships preserved",
+      "Read-only viewer — browse, search, filter",
+      "Ad hoc CSV/JSON exports",
+      "Manual sync — CLI or dashboard",
+      "Basic sync dashboard & open-source engine",
+      "Community support — self-host with Docker",
     ],
   },
   {
     id: "managed",
     name: "Managed",
     price: "€20",
-    period: "/ month",
+    period: "/ month (planned)",
+    comingSoon: true,
     features: [
-      "Everything in Free",
-      "Managed Postgres hosting",
-      "Automatic hourly sync",
-      "Up to 10,000 pages",
-      "Up to 3 workspaces",
-      "Email alerts on sync failure",
-      "Email support",
+      "Target: Phase 2 — after validation",
+      "Managed orchestration — scheduled sync to your vault (not our DB as canonical store)",
+      "Email alerts on failure & stale sync",
+      "Higher limits & multi-workspace — per roadmap",
     ],
   },
   {
     id: "enterprise",
     name: "Enterprise",
-    price: "€80",
-    period: "/ month",
+    price: "€80+",
+    period: "/ month (planned)",
+    comingSoon: true,
     features: [
-      "Everything in Managed",
-      "Unlimited pages & workspaces",
-      "Real-time continuous sync",
-      "Salesforce, HubSpot connectors",
-      "Team access & white-label",
-      "Priority support",
-      "Dedicated onboarding",
+      "Target: Phase 3+ — scale & agencies",
+      "Unlimited-style limits, real-time sync, team access",
+      "Enterprise connectors & migrations — per roadmap",
+      "White-label & priority support — per roadmap",
     ],
   },
 ] as const;
@@ -87,7 +91,9 @@ interface PlanCardProps {
 }
 
 const PlanCard = ({ plan, current, onUpgrade, loading }: PlanCardProps) => (
-  <Card className={`border-border/80 ${current ? "ring-2 ring-primary" : "bg-card/50"}`}>
+  <Card
+    className={`border-border/80 ${current ? "ring-2 ring-primary" : "bg-card/50"} ${plan.comingSoon ? "opacity-95" : ""}`}
+  >
     <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
       <div>
         <CardTitle className="text-base font-semibold">{plan.name}</CardTitle>
@@ -96,18 +102,24 @@ const PlanCard = ({ plan, current, onUpgrade, loading }: PlanCardProps) => (
           <span className="text-sm font-normal text-muted-foreground"> {plan.period}</span>
         </p>
       </div>
-      {current && <Badge variant="default">Current plan</Badge>}
+      <div className="flex flex-col items-end gap-1">
+        {current && <Badge variant="default">Current plan</Badge>}
+        {plan.comingSoon && !current && (
+          <Badge variant="secondary">Coming soon</Badge>
+        )}
+      </div>
     </CardHeader>
     <CardContent className="space-y-4">
       <ul className="text-sm text-muted-foreground space-y-1">
         {plan.features.map((f) => (
           <li key={f} className="flex items-start gap-2">
-            <span className="text-primary mt-0.5">✓</span>
+            <span className="text-primary mt-0.5">{plan.comingSoon ? "·" : "✓"}</span>
             {f}
           </li>
         ))}
       </ul>
-      {plan.id !== "free" && !current && (
+      {/* Paid checkout opens only when the tier ships; Phase 1 is Free only. */}
+      {plan.id !== "free" && !current && !plan.comingSoon && (
         <Button
           className="w-full"
           size="sm"
@@ -115,6 +127,11 @@ const PlanCard = ({ plan, current, onUpgrade, loading }: PlanCardProps) => (
           onClick={() => onUpgrade(plan.id)}
         >
           {loading ? "Redirecting…" : `Upgrade to ${plan.name}`}
+        </Button>
+      )}
+      {plan.comingSoon && !current && (
+        <Button className="w-full" size="sm" variant="secondary" disabled>
+          Coming soon
         </Button>
       )}
     </CardContent>
@@ -156,51 +173,50 @@ const BillingInner = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground px-6 py-12 max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Billing</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {isLoading ? "Loading plan…" : `You are on the ${currentPlan} plan.`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {isPaid && (
-            <Button variant="outline" size="sm" disabled={openingPortal} onClick={handleManage}>
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <AppTopNav active="billing" />
+
+      <main className="max-w-4xl mx-auto px-6 py-10 w-full space-y-8 flex-1">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Billing</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {isLoading ? "Loading plan…" : `You are on the ${currentPlan} plan.`}
+            </p>
+          </div>
+          {isPaid ? (
+            <Button variant="outline" size="sm" disabled={openingPortal} onClick={handleManage} className="shrink-0">
               {openingPortal ? "Opening…" : "Manage subscription"}
             </Button>
-          )}
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/dashboard">← Dashboard</Link>
-          </Button>
+          ) : null}
         </div>
-      </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {PLANS.map((plan) => (
-          <PlanCard
-            key={plan.id}
-            plan={plan}
-            current={plan.id === currentPlan}
-            onUpgrade={handleUpgrade}
-            loading={upgrading}
-          />
-        ))}
-      </div>
+        <div className="grid gap-6 md:grid-cols-3">
+          {PLANS.map((plan) => (
+            <PlanCard
+              key={plan.id}
+              plan={plan}
+              current={plan.id === currentPlan}
+              onUpgrade={handleUpgrade}
+              loading={upgrading}
+            />
+          ))}
+        </div>
 
-      {isPaid && subscription?.current_period_end && (
+        {isPaid && subscription?.current_period_end && (
+          <p className="text-xs text-muted-foreground text-center">
+            Current period ends{" "}
+            <span className="text-foreground">
+              {new Date(subscription.current_period_end).toLocaleDateString()}
+            </span>
+            .
+          </p>
+        )}
+
         <p className="text-xs text-muted-foreground text-center">
-          Current period ends{" "}
-          <span className="text-foreground">
-            {new Date(subscription.current_period_end).toLocaleDateString()}
-          </span>
-          .
+          Payments are handled securely by Stripe. We never store your card details.
         </p>
-      )}
-
-      <p className="text-xs text-muted-foreground text-center">
-        Payments are handled securely by Stripe. We never store your card details.
-      </p>
+      </main>
     </div>
   );
 };

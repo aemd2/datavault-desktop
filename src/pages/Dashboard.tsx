@@ -1,11 +1,10 @@
 import { useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { AuthGuard } from "@/components/AuthGuard";
+import { AppTopNav } from "@/components/AppTopNav";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ConnectorCard } from "@/components/dashboard/ConnectorCard";
 import { SyncFailureBanner } from "@/components/dashboard/SyncFailureBanner";
@@ -15,35 +14,10 @@ import { countActiveSyncJobs, pickRelevantSyncJobForConnector } from "@/lib/pick
 import { useClearPendingSyncJobs } from "@/hooks/useClearPendingSyncJobs";
 import { useConnectors } from "@/hooks/useConnectors";
 import { useSyncJobs } from "@/hooks/useSyncJobs";
-import { useSubscription } from "@/hooks/useSubscription";
-
 /**
  * Supabase Edge Function base URL for OAuth initiation.
  * The Edge Function reads the user JWT from Authorization header.
  */
-
-/** Plan label people understand at a glance. */
-function planDisplayName(plan: string): string {
-  const p = plan.toLowerCase();
-  if (p === "free") return "Free plan";
-  if (p === "managed") return "Managed";
-  if (p === "enterprise") return "Enterprise";
-  return plan;
-}
-
-/** Colour by tier — outline for free, stronger for paid. */
-function PlanBadge({ plan }: { plan: string }) {
-  const variants: Record<string, "default" | "secondary" | "outline"> = {
-    free: "outline",
-    managed: "secondary",
-    enterprise: "default",
-  };
-  return (
-    <Badge variant={variants[plan.toLowerCase()] ?? "outline"} className="capitalize">
-      {planDisplayName(plan)}
-    </Badge>
-  );
-}
 
 /** Triggers Notion OAuth: fetches session JWT then opens the OAuth URL.
  *  In Electron, uses shell.openExternal so the system browser handles the flow.
@@ -73,12 +47,10 @@ async function startNotionOAuth() {
  * Main app shell after login: connectors + recent sync jobs.
  */
 const DashboardInner = () => {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: connectors = [], isLoading: loadingConn, error: connError } = useConnectors();
   const ids = connectors.map((c) => c.id);
   const { data: jobs = [], isLoading: loadingJobs, error: jobsError } = useSyncJobs(ids);
-  const { data: subscription } = useSubscription();
   const { mutate: clearPendingJobs, isPending: clearingPending } = useClearPendingSyncJobs();
   const pendingRowCount = useMemo(() => jobs.filter((j) => j.status === "pending").length, [jobs]);
   const activeBackupTotal = useMemo(() => countActiveSyncJobs(jobs), [jobs]);
@@ -111,49 +83,9 @@ const DashboardInner = () => {
   const connectorLabel = (connectorId: string) =>
     connectors.find((c) => c.id === connectorId)?.workspace_name ?? "Your workspace";
 
-  const isElectronApp = typeof window !== "undefined" && "electronAPI" in window;
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    // Electron: go to login (there's no landing page). Web: go to home.
-    navigate(isElectronApp ? "/login" : "/", { replace: true });
-  };
-
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/80 bg-card/30">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div>
-              <h1 className="font-display text-xl font-bold">
-                <span className="text-foreground">Data</span>
-                <span className="text-gradient-gold">Vault</span>
-              </h1>
-              <p className="text-xs text-muted-foreground">Your backup &amp; workspaces</p>
-            </div>
-            {subscription && <PlanBadge plan={subscription.plan} />}
-          </div>
-
-          {/* flex-wrap keeps buttons usable on small screens */}
-          <div className="flex flex-wrap gap-2">
-            {/* Electron has no landing page — Dashboard IS home */}
-            {!isElectronApp && (
-              <Button variant="outline" size="sm" onClick={() => navigate("/")}>
-                Home
-              </Button>
-            )}
-            <Button variant="default" size="sm" onClick={() => navigate("/viewer")}>
-              Browse backup
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate("/billing")}>
-              Billing
-            </Button>
-            <Button variant="secondary" size="sm" onClick={handleLogout}>
-              Log out
-            </Button>
-          </div>
-        </div>
-      </header>
+      <AppTopNav active="dashboard" />
 
       <main className="max-w-4xl mx-auto px-6 py-10 space-y-10">
         <section className="space-y-4">
