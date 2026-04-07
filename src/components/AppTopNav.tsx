@@ -51,6 +51,7 @@ export function AppTopNav({ active }: AppTopNavProps) {
 
   const browseVariant = active === "dashboard" || active === "viewer" ? "default" : "outline";
   const billingVariant = active === "billing" ? "default" : "outline";
+  const showDashboardBack = active !== "dashboard";
 
   return (
     <header className="border-b border-border/80 bg-card/30 shrink-0">
@@ -72,6 +73,11 @@ export function AppTopNav({ active }: AppTopNavProps) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {showDashboardBack ? (
+            <Button variant="outline" size="sm" onClick={() => navigate("/dashboard")}>
+              Dashboard
+            </Button>
+          ) : null}
           <Button variant={browseVariant} size="sm" onClick={() => navigate("/viewer")}>
             Browse backup
           </Button>
