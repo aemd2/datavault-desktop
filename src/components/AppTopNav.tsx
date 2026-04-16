@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useSubscription } from "@/hooks/useSubscription";
 
 /** Which nav item gets the primary (gold) button — matches current page. */
-export type AppNavActive = "dashboard" | "viewer" | "billing";
+export type AppNavActive = "dashboard" | "viewer" | "billing" | "platforms";
 
 /** Plan label people understand at a glance. */
 function planDisplayName(plan: string): string {
@@ -51,6 +51,7 @@ export function AppTopNav({ active }: AppTopNavProps) {
 
   const browseVariant = active === "dashboard" || active === "viewer" ? "default" : "outline";
   const billingVariant = active === "billing" ? "default" : "outline";
+  const platformsVariant = active === "platforms" ? "default" : "outline";
   const showDashboardBack = active !== "dashboard";
 
   return (
@@ -80,6 +81,9 @@ export function AppTopNav({ active }: AppTopNavProps) {
           ) : null}
           <Button variant={browseVariant} size="sm" onClick={() => navigate("/viewer")}>
             Browse backup
+          </Button>
+          <Button variant={platformsVariant} size="sm" onClick={() => navigate("/platforms")}>
+            Platforms
           </Button>
           <Button variant={billingVariant} size="sm" onClick={() => navigate("/billing")}>
             Billing

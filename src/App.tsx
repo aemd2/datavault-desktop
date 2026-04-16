@@ -11,6 +11,7 @@ const Login = lazy(() => import("./pages/Login.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Billing = lazy(() => import("./pages/Billing.tsx"));
 const Viewer = lazy(() => import("./pages/Viewer.tsx"));
+const Platforms = lazy(() => import("./pages/Platforms.tsx"));
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,7 @@ const App = () => (
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/billing" element={<Billing />} />
             <Route path="/viewer/*" element={<Viewer />} />
+            <Route path="/platforms" element={<Platforms />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
