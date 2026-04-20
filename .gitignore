@@ -15,6 +15,9 @@ release
 *.local
 .env
 
+# Supabase CLI local link cache (project ref); keep function source under supabase/functions/
+supabase/.temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

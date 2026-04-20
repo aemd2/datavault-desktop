@@ -13,10 +13,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { SyncJobRow } from "@/hooks/useSyncJobs";
 import { useCancelSyncJob } from "@/hooks/useCancelSyncJob";
+import { displayProgressStep } from "@/lib/connectorDisplay";
 import { minutesSince } from "@/lib/pickSyncJobForUI";
 
 interface WorkspaceSyncProgressProps {
   job: SyncJobRow;
+  /** Human-readable source (Notion, Trello, …) — fixes server copy that still says "Notion". */
+  sourceLabel: string;
   /** How many other pending/running jobs exist (for a short queue hint). */
   otherActiveBackupCount: number;
 }
@@ -76,7 +79,7 @@ function QueueWaitingBar() {
  * Single backup progress block for one workspace card (bar, timer, stop, hints).
  * Keeps the dashboard from showing two progress UIs for the same run.
  */
-export function WorkspaceSyncProgress({ job, otherActiveBackupCount }: WorkspaceSyncProgressProps) {
+export function WorkspaceSyncProgress({ job, sourceLabel, otherActiveBackupCount }: WorkspaceSyncProgressProps) {
   const { mutate: cancelJob, isPending: cancelling } = useCancelSyncJob();
   const [stopOpen, setStopOpen] = useState(false);
 
@@ -86,8 +89,7 @@ export function WorkspaceSyncProgress({ job, otherActiveBackupCount }: Workspace
   const isPending = job.status === "pending";
   const pct = job.progress_pct ?? 0;
   const remaining = useTimeRemaining(isPending ? null : startedAt, pct);
-  const step =
-    job.progress_step || (isPending ? "Starting your backup…" : "Working on your Notion backup…");
+  const step = displayProgressStep(job.progress_step, sourceLabel, isPending);
 
   const stuckPending = isPending && minutesSince(job.created_at) >= 8;
   const stuckRunning = !isPending && minutesSince(job.started_at) >= 45;
@@ -122,7 +124,7 @@ export function WorkspaceSyncProgress({ job, otherActiveBackupCount }: Workspace
                   <span className="block">
                     {isPending
                       ? "This run will be removed from the queue. Nothing has been copied yet for this job."
-                      : "We will stop after the current step. Pages already saved stay in your backup; the rest can be added later with Sync Now."}
+                      : "We will stop after the current step. Data already saved stays in your backup; the rest can be added later with Sync Now."}
                   </span>
                 </AlertDialogDescription>
               </AlertDialogHeader>

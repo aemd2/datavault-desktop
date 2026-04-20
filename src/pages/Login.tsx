@@ -173,17 +173,20 @@ const Login = () => {
     <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center px-6">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center space-y-2">
-          {true ? (
-            <span className="font-display text-2xl font-bold inline-block">
-              <span className="text-foreground">Data</span>
-              <span className="text-gradient-gold">Vault</span>
-            </span>
-          ) : (
-            <Link to="/" className="font-display text-2xl font-bold inline-block">
-              <span className="text-foreground">Data</span>
-              <span className="text-gradient-gold">Vault</span>
-            </Link>
-          )}
+          <div className="flex items-center justify-center gap-3">
+            <img src="/favicon.svg" alt="" className="w-10 h-10" />
+            {true ? (
+              <span className="font-display text-2xl font-bold inline-block">
+                <span className="text-foreground">Data</span>
+                <span className="text-gradient-gold">Vault</span>
+              </span>
+            ) : (
+              <Link to="/" className="font-display text-2xl font-bold inline-block">
+                <span className="text-foreground">Data</span>
+                <span className="text-gradient-gold">Vault</span>
+              </Link>
+            )}
+          </div>
           <h1 className="text-xl font-semibold">Sign in</h1>
           <p className="text-sm text-muted-foreground">
             {step === "email" && (

@@ -1,14 +1,17 @@
-import { useId, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Link, Outlet, useMatch } from "react-router-dom";
 import { BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AppTopNav } from "@/components/AppTopNav";
 import { Label } from "@/components/ui/label";
 import { PageSidebarTree } from "@/components/viewer/PageSidebarTree";
+import { TrelloSidebarBoards } from "@/components/viewer/TrelloSidebarBoards";
 import { DownloadBackupButton } from "@/components/viewer/DownloadBackupButton";
 import { useConnectors } from "@/hooks/useConnectors";
 import { useNotionPages } from "@/hooks/useNotionPages";
+import { useTrelloBoards } from "@/hooks/useTrelloData";
 import { isLocalFirstVault } from "@/lib/dataVaultMode";
+import { friendlyConnectorLabel } from "@/lib/connectorDisplay";
 import type { ViewerOutletContext } from "@/pages/viewerTypes";
 
 /**
@@ -18,7 +21,6 @@ export function ViewerLayout() {
   const workspaceSelectId = useId();
   const [selectedConnector, setSelectedConnector] = useState<string | undefined>(undefined);
   const { data: connectors = [], isLoading: loadingConnectors } = useConnectors();
-  const { data: sidebarPages = [] } = useNotionPages(selectedConnector);
 
   const pageMatch = useMatch("/viewer/page/:pageId");
   const activePageId = pageMatch?.params.pageId;
@@ -26,7 +28,32 @@ export function ViewerLayout() {
   const singleWorkspaceName =
     connectors.length === 1 ? (connectors[0].workspace_name ?? "Your workspace") : null;
 
-  const outletCtx: ViewerOutletContext = { selectedConnector, setSelectedConnector };
+  // When only one workspace exists, behave as if it is selected so Browse + sidebar query the right rows
+  // (otherwise `selectedConnector` stays undefined and we default connector type to Notion).
+  const resolvedConnectorId = useMemo(
+    () => selectedConnector ?? (connectors.length === 1 ? connectors[0]?.id : undefined),
+    [selectedConnector, connectors],
+  );
+
+  const selectedConn = connectors.find((c) => c.id === resolvedConnectorId);
+  const connectorType = selectedConn?.type?.toLowerCase() || "notion";
+  const connectorLabel = selectedConn
+    ? friendlyConnectorLabel(selectedConn.type || "notion")
+    : singleWorkspaceName || "Your workspace";
+
+  const { data: sidebarPages = [] } = useNotionPages(selectedConnector);
+  const { data: trelloSidebarBoards = [] } = useTrelloBoards(
+    connectorType === "trello" ? resolvedConnectorId : undefined,
+  );
+
+  // Pass type and label so ViewerBrowse can show correct copy and components for Trello vs Notion.
+  // `selectedConnector` uses resolved id so a single Trello-only account still loads `trello_*` rows.
+  const outletCtx: ViewerOutletContext = {
+    selectedConnector: resolvedConnectorId,
+    setSelectedConnector,
+    connectorType,
+    connectorLabel,
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -95,7 +122,11 @@ export function ViewerLayout() {
           </div>
         ) : (
           <>
-            <PageSidebarTree pages={sidebarPages} activePageId={activePageId} />
+            {connectorType === "trello" ? (
+              <TrelloSidebarBoards boards={trelloSidebarBoards} />
+            ) : (
+              <PageSidebarTree pages={sidebarPages} activePageId={activePageId} />
+            )}
             <div className="flex-1 min-w-0 min-h-0">
               {singleWorkspaceName && (
                 <p className="text-sm text-muted-foreground mb-4">

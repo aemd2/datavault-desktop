@@ -7,12 +7,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { SyncJobRow } from "@/hooks/useSyncJobs";
+import { humanizeStoredSyncFailureMessage } from "@/lib/connectorDisplay";
 import { friendlySyncHistoryLoadError } from "@/lib/friendlySyncErrors";
 
 interface SyncStatusProps {
   jobs: SyncJobRow[];
   isLoading: boolean;
   error: Error | null;
+  /** Maps job.connector_id → integration label (Trello, Notion, …) for failed-run copy. */
+  connectorSourceLabel?: (connectorId: string) => string;
 }
 
 /** Map raw job status to a short, friendly label. */
@@ -29,7 +32,7 @@ function statusLabel(status: string): string {
 /**
  * Recent backup runs — plain language for non-technical users.
  */
-export const SyncStatus = ({ jobs, isLoading, error }: SyncStatusProps) => {
+export const SyncStatus = ({ jobs, isLoading, error, connectorSourceLabel }: SyncStatusProps) => {
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading recent backups…</p>;
   }
@@ -70,7 +73,12 @@ export const SyncStatus = ({ jobs, isLoading, error }: SyncStatusProps) => {
             <TableCell className="align-top">
               <div className="font-medium">{statusLabel(j.status)}</div>
               {(j.status === "failed" || j.status === "cancelled") && j.progress_step ? (
-                <p className="text-xs text-muted-foreground mt-1 max-w-[14rem] leading-snug">{j.progress_step}</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[18rem] leading-snug">
+                  {connectorSourceLabel
+                    ? humanizeStoredSyncFailureMessage(j.progress_step, connectorSourceLabel(j.connector_id)) ||
+                      j.progress_step
+                    : j.progress_step}
+                </p>
               ) : null}
             </TableCell>
             <TableCell className="text-muted-foreground text-xs">

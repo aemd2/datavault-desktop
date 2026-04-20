@@ -89,8 +89,17 @@ function createWindow(): void {
     shell.openExternal(url);
   });
 
-  // Apply Content Security Policy to all responses
+  // Apply Content Security Policy to app responses only.
+  // Skip the CSP override for external OAuth pages (Trello, Atlassian CDN)
+  // so their own scripts can load normally inside the OAuth popup window.
+  const OAUTH_HOSTS = ["trello.com", "atlassian.com", "atl-paas.net", "atlassian.net"];
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const isOAuthPage = OAUTH_HOSTS.some((h) => details.url.includes(h));
+    if (isOAuthPage) {
+      // Let Trello/Atlassian pages serve with their own headers unchanged.
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
     callback({
       responseHeaders: {
         ...details.responseHeaders,

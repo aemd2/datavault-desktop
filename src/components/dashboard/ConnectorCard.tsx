@@ -17,6 +17,7 @@ import type { SyncJobRow } from "@/hooks/useSyncJobs";
 import { useStartSync, type StartSyncArgs } from "@/hooks/useStartSync";
 import { useDisconnectConnector } from "@/hooks/useDisconnectConnector";
 import { WorkspaceSyncProgress } from "@/components/dashboard/WorkspaceSyncProgress";
+import { friendlySourceLabel, syncKindFromDbType } from "@/lib/connectorDisplay";
 
 interface ConnectorCardProps {
   connector: ConnectorRow;
@@ -24,13 +25,6 @@ interface ConnectorCardProps {
   activeSyncJob?: SyncJobRow;
   /** Other pending/running jobs (for a one-line queue hint under this card’s progress). */
   otherActiveBackupCount?: number;
-}
-
-/** Turn internal type codes into a short label people recognize. */
-function friendlySourceLabel(type: string): string {
-  const t = type.toLowerCase();
-  if (t === "notion") return "Notion";
-  return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
 /**
@@ -41,9 +35,12 @@ export const ConnectorCard = ({
   activeSyncJob,
   otherActiveBackupCount = 0,
 }: ConnectorCardProps) => {
+  const sourceLabel = friendlySourceLabel(connector.type);
+  const syncKind = syncKindFromDbType(connector.type);
+
   const { mutate: startSync, isPending } = useStartSync();
   const handleSync = (force = false) =>
-    startSync({ connectorId: connector.id, force } as StartSyncArgs);
+    startSync({ connectorId: connector.id, force, kind: syncKind } as StartSyncArgs);
   const { mutate: disconnectConnector, isPending: disconnecting } = useDisconnectConnector();
   const [disconnectOpen, setDisconnectOpen] = useState(false);
   const syncing = Boolean(activeSyncJob);
@@ -57,7 +54,7 @@ export const ConnectorCard = ({
           {connector.workspace_name ?? "Your workspace"}
         </CardTitle>
         <Badge variant="secondary" className="shrink-0 capitalize">
-          {friendlySourceLabel(connector.type)}
+          {sourceLabel}
         </Badge>
       </CardHeader>
 
@@ -95,7 +92,7 @@ export const ConnectorCard = ({
               variant="default"
               disabled={isPending}
               onClick={() => handleSync(false)}
-              title="Fetches only new and changed pages from Notion into your backup"
+              title={`Fetch only new and changed data from ${sourceLabel} into your backup`}
             >
               {isPending
                 ? "Starting backup…"
@@ -113,7 +110,7 @@ export const ConnectorCard = ({
                 variant="ghost"
                 className="text-xs text-muted-foreground hover:text-foreground"
                 onClick={() => handleSync(true)}
-                title="Re-copy all pages from scratch, even ones that haven't changed"
+                title="Re-copy everything from scratch, even items that have not changed"
               >
                 Full re-sync
               </Button>
@@ -121,7 +118,11 @@ export const ConnectorCard = ({
           </div>
 
           {syncing && activeSyncJob ? (
-            <WorkspaceSyncProgress job={activeSyncJob} otherActiveBackupCount={otherActiveBackupCount} />
+            <WorkspaceSyncProgress
+              job={activeSyncJob}
+              sourceLabel={sourceLabel}
+              otherActiveBackupCount={otherActiveBackupCount}
+            />
           ) : (
             <p className="text-xs text-muted-foreground leading-relaxed">
               Usually takes a few minutes. You can leave this page — progress appears here while a backup runs.
@@ -140,7 +141,9 @@ export const ConnectorCard = ({
                 className="h-8 px-2 text-muted-foreground hover:text-destructive"
                 disabled={disconnecting}
               >
-                {connector.type.toLowerCase() === "notion" ? "Disconnect Notion" : "Disconnect workspace"}
+                {connector.type.toLowerCase() === "notion"
+                  ? "Disconnect Notion"
+                  : `Disconnect ${sourceLabel}`}
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -148,9 +151,9 @@ export const ConnectorCard = ({
                 <AlertDialogTitle>Disconnect this workspace?</AlertDialogTitle>
                 <AlertDialogDescription className="space-y-2">
                   <span className="block">
-                    We will remove this connection and delete the copied pages and tables for{" "}
+                    We will remove this connection and delete the copied data for{" "}
                     <strong className="text-foreground">{connector.workspace_name ?? "this workspace"}</strong> from
-                    DataVault. Your original content in Notion is not deleted.
+                    DataVault. Your original content in {sourceLabel} is not deleted.
                   </span>
                   {syncing ? (
                     <span className="block text-amber-600 dark:text-amber-500">

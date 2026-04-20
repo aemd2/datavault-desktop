@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppTopNav } from "@/components/AppTopNav";
@@ -14,39 +13,14 @@ import { countActiveSyncJobs, pickRelevantSyncJobForConnector } from "@/lib/pick
 import { useClearPendingSyncJobs } from "@/hooks/useClearPendingSyncJobs";
 import { useConnectors } from "@/hooks/useConnectors";
 import { useSyncJobs } from "@/hooks/useSyncJobs";
-/**
- * Supabase Edge Function base URL for OAuth initiation.
- * The Edge Function reads the user JWT from Authorization header.
- */
-
-/** Triggers Notion OAuth: fetches session JWT then opens the OAuth URL.
- *  In Electron, uses shell.openExternal so the system browser handles the flow.
- *  On web, it's a normal navigation. */
-async function startNotionOAuth() {
-  const { data } = await supabase.auth.getSession();
-  const jwt = data.session?.access_token;
-  if (!jwt) return;
-  // Pass the JWT as ?token= so the Edge Function can encode it as OAuth state.
-  const oauthUrl = `${SUPABASE_URL}/functions/v1/notion-oauth?action=start&token=${encodeURIComponent(jwt)}`;
-
-  const isElectron = typeof window !== "undefined" && "electronAPI" in window;
-  if (isElectron && window.electronAPI?.openExternal) {
-    // Open in system browser; user returns to the app after authorizing.
-    // The connector is stored in Supabase and will appear on next poll.
-    toast.message("Notion is opening in your browser", {
-      description: "Authorize access, then come back here — your workspace will appear automatically.",
-      duration: 8000,
-    });
-    await window.electronAPI.openExternal(oauthUrl);
-  } else {
-    window.location.href = oauthUrl;
-  }
-}
+import { friendlyConnectorLabel } from "@/lib/connectorDisplay";
+import { startNotionOAuth } from "@/lib/startNotionOAuth";
 
 /**
  * Main app shell after login: connectors + recent sync jobs.
  */
 const DashboardInner = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: connectors = [], isLoading: loadingConn, error: connError } = useConnectors();
   const ids = connectors.map((c) => c.id);
@@ -83,6 +57,12 @@ const DashboardInner = () => {
   const connectorLabel = (connectorId: string) =>
     connectors.find((c) => c.id === connectorId)?.workspace_name ?? "Your workspace";
 
+  /** Notion/Trello/… — used to fix server error strings that still say "Notion". */
+  const connectorSourceLabel = (connectorId: string) => {
+    const row = connectors.find((c) => c.id === connectorId);
+    return row ? friendlyConnectorLabel(row.type) : "Connected source";
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppTopNav active="dashboard" />
@@ -93,13 +73,18 @@ const DashboardInner = () => {
             <div>
               <h2 className="text-lg font-semibold">Connected workspaces</h2>
               <p className="text-sm text-muted-foreground mt-0.5">
-                Link Notion once, then use <strong className="text-foreground">Sync Now</strong> anytime to refresh
-                your backup.
+                Add accounts on <strong className="text-foreground">Platforms</strong>, then use{" "}
+                <strong className="text-foreground">Sync Now</strong> here to refresh each backup.
               </p>
             </div>
-            <Button size="sm" className="shrink-0" onClick={startNotionOAuth}>
-              + Connect Notion
-            </Button>
+            <div className="flex flex-wrap gap-2 shrink-0 justify-end">
+              <Button size="sm" variant="outline" onClick={() => navigate("/platforms")}>
+                + Add connection
+              </Button>
+              <Button size="sm" onClick={startNotionOAuth}>
+                + Connect Notion
+              </Button>
+            </div>
           </div>
 
           {loadingConn && <p className="text-sm text-muted-foreground">Loading your workspaces…</p>}
@@ -113,15 +98,19 @@ const DashboardInner = () => {
           )}
           {!loadingConn && connectors.length === 0 && (
             <div className="rounded-xl border border-border/60 bg-muted/10 p-6 space-y-3 max-w-xl">
-              <p className="text-sm text-foreground font-medium">Connect Notion to get started</p>
+              <p className="text-sm text-foreground font-medium">Connect a source to get started</p>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Press <strong className="text-foreground">+ Connect Notion</strong> and approve access. That&apos;s
-                it — no copying tokens by hand.
+                Open <strong className="text-foreground">Platforms</strong> to link Notion, Trello, and more — or use{" "}
+                <strong className="text-foreground">+ Connect Notion</strong> above for a quick Notion-only setup.
               </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button size="sm" variant="default" onClick={() => navigate("/platforms")}>
+                  Go to Platforms
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground leading-relaxed border-t border-border/50 pt-3">
-                <span className="font-medium text-foreground">Setting up the app?</span> Your developer needs
-                Notion OAuth keys in Supabase (Edge Function secrets). See{" "}
-                <code className="text-foreground">supabase/functions/README.md</code>.
+                <span className="font-medium text-foreground">Setting up the app?</span> OAuth keys live in Supabase
+                Edge Function secrets. See <code className="text-foreground">supabase/functions/README.md</code>.
               </p>
             </div>
           )}
@@ -141,7 +130,11 @@ const DashboardInner = () => {
           </div>
         </section>
 
-        <SyncFailureBanner jobs={jobs} connectorLabel={connectorLabel} />
+        <SyncFailureBanner
+          jobs={jobs}
+          connectorLabel={connectorLabel}
+          connectorSourceLabel={connectorSourceLabel}
+        />
 
         <section className="space-y-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -169,7 +162,12 @@ const DashboardInner = () => {
             ) : null}
           </div>
           <ErrorBoundary componentName="SyncStatus">
-            <SyncStatus jobs={jobs} isLoading={loadingJobs} error={jobsError as Error | null} />
+            <SyncStatus
+              jobs={jobs}
+              isLoading={loadingJobs}
+              error={jobsError as Error | null}
+              connectorSourceLabel={connectorSourceLabel}
+            />
           </ErrorBoundary>
         </section>
       </main>

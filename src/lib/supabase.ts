@@ -20,12 +20,13 @@ const FALLBACK_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFz
 export const SUPABASE_URL: string =
   (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? FALLBACK_URL;
 
-const supabaseAnonKey: string =
+/** Public anon key — same value the JS client uses; safe to send on Edge Function requests. */
+export const SUPABASE_ANON_KEY: string =
   (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? FALLBACK_ANON;
 
-export const supabase = createClient(SUPABASE_URL, supabaseAnonKey);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /** Check if Supabase is configured (anon key present). */
 export function isSupabaseConfigured(): boolean {
-  return Boolean(SUPABASE_URL && supabaseAnonKey);
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 }

@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase";
 import { friendlyQueueSyncError, friendlyChunkError } from "@/lib/friendlySyncErrors";
+import type { ConnectorKind } from "@/lib/connectorKinds";
 
 const RUN_SYNC_URL = `${SUPABASE_URL}/functions/v1/run-sync`;
 
@@ -41,10 +42,16 @@ interface ChunkResponse {
   /** True when run-sync is in local-first vault mode (DATAVAULT_STORE_FULL_PAYLOAD=false).
    *  Page bodies are in Storage, not in notion_pages.raw_json. */
   vault_pages_in_storage?: boolean;
+  /** Echoed back so the client can forward on the next chunk. */
+  connector_kind?: ConnectorKind;
+  /** Opaque per-connector resume state returned by the Edge Function. */
+  kind_state?: Record<string, unknown>;
 }
 
 interface ChunkParams {
   connector_id: string;
+  /** Which platform this connector belongs to. Defaults to "notion" on the server. */
+  connector_kind?: ConnectorKind;
   job_id?: string;
   cursor?: string;
   page_count?: number;
@@ -58,6 +65,8 @@ interface ChunkParams {
   total_items?: number;
   count_complete?: boolean;
   users_fetched?: boolean;
+  /** Opaque per-connector resume state (Trello/Asana/etc. pack their cursor here). */
+  kind_state?: Record<string, unknown>;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -75,10 +84,13 @@ async function fireChunk(params: ChunkParams): Promise<ChunkResponse> {
   const jwt = sessionData.session?.access_token;
   if (!jwt) throw new Error("Not signed in — please sign in and try again.");
 
+  // Supabase's API gateway expects `apikey` (anon key) on browser calls. Without it,
+  // the OPTIONS preflight or POST can fail with CORS / net::ERR_FAILED from localhost.
   const resp = await fetch(RUN_SYNC_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${jwt}`,
+      apikey: SUPABASE_ANON_KEY,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(params),
@@ -101,8 +113,13 @@ async function runSyncChain(
   connectorId: string,
   queryClient: ReturnType<typeof useQueryClient>,
   force = false,
+  kind?: ConnectorKind,
 ) {
-  let params: ChunkParams = { connector_id: connectorId, force: force || undefined };
+  let params: ChunkParams = {
+    connector_id: connectorId,
+    connector_kind: kind,
+    force: force || undefined,
+  };
   let consecutiveNetworkErrors = 0;
 
   // eslint-disable-next-line no-constant-condition
@@ -115,7 +132,7 @@ async function runSyncChain(
     } catch (err) {
       consecutiveNetworkErrors++;
       if (consecutiveNetworkErrors > MAX_CHUNK_RETRIES) {
-        toast.error(friendlyChunkError(err), { duration: 10_000 });
+        toast.error(friendlyChunkError(err, kind), { duration: 10_000 });
         return;
       }
       // Wait and retry with the same params (the Edge Function saved progress).
@@ -129,6 +146,16 @@ async function runSyncChain(
       queryClient.invalidateQueries({ queryKey: ["notion-pages"] });
       queryClient.invalidateQueries({ queryKey: ["notion-databases"] });
       queryClient.invalidateQueries({ queryKey: ["notion-comments"] });
+      queryClient.invalidateQueries({ queryKey: ["trello-boards"] });
+      queryClient.invalidateQueries({ queryKey: ["trello-cards"] });
+      if (result.connector_kind === "trello") {
+        const c = result.pages ?? 0;
+        const l = result.databases ?? 0;
+        const b = result.rows ?? 0;
+        // Updated toast reflects the rich data now downloaded (checklists, attachments, labels, members)
+        toast.success(`Trello backup complete — ${c} cards (with checklists & attachments), ${l} lists, ${b} boards.`, { duration: 8_000 });
+        return;
+      }
       const parts = [
         result.pages ? `${result.pages} pages` : null,
         result.databases ? `${result.databases} tables` : null,
@@ -146,7 +173,9 @@ async function runSyncChain(
 
     if (result.status === "failed") {
       queryClient.invalidateQueries({ queryKey: ["sync_jobs"] });
-      toast.error(result.error ?? "Backup failed — try again later.", { duration: 10_000 });
+      const failKind = result.connector_kind ?? kind;
+      const raw = result.error ?? "Backup failed — try again later.";
+      toast.error(friendlyChunkError(raw, failKind), { duration: 12_000 });
       return;
     }
 
@@ -170,6 +199,7 @@ async function runSyncChain(
       await sleep(INTER_CHUNK_PAUSE_MS);
       params = {
         connector_id: result.connector_id ?? connectorId,
+        connector_kind: result.connector_kind ?? kind,
         job_id: result.job_id,
         cursor: result.cursor,
         page_count: result.page_count,
@@ -183,6 +213,7 @@ async function runSyncChain(
         total_items: result.total_items,
         count_complete: result.count_complete,
         users_fetched: result.users_fetched,
+        kind_state: result.kind_state,
       };
       continue;
     }
@@ -199,6 +230,8 @@ export interface StartSyncArgs {
   connectorId: string;
   /** When true, re-fetch everything — ignore skip-if-unchanged optimization. */
   force?: boolean;
+  /** Which platform this connector belongs to. Defaults to Notion on the server. */
+  kind?: ConnectorKind;
 }
 
 /**
@@ -210,7 +243,7 @@ export function useStartSync() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ connectorId, force = false }: StartSyncArgs) => {
+    mutationFn: async ({ connectorId, force = false, kind }: StartSyncArgs) => {
       // One pending row per connector.
       const { count, error: countError } = await supabase
         .from("sync_jobs")
@@ -220,7 +253,7 @@ export function useStartSync() {
 
       if (countError) throw countError;
       if (count != null && count > 0) {
-        runSyncChain(connectorId, queryClient, force);
+        runSyncChain(connectorId, queryClient, force, kind);
         return { skipped: true as const, connectorId };
       }
 
@@ -233,7 +266,7 @@ export function useStartSync() {
       if (!runErr && runningCount != null && runningCount > 0) {
         // Kick the chain even for running jobs — the Edge Function will
         // resume from saved chunk_state (handles tab-close mid-sync).
-        runSyncChain(connectorId, queryClient, force);
+        runSyncChain(connectorId, queryClient, force, kind);
         return { skipped: true as const, connectorId };
       }
 
@@ -243,7 +276,7 @@ export function useStartSync() {
 
       if (error) throw error;
 
-      runSyncChain(connectorId, queryClient, force);
+      runSyncChain(connectorId, queryClient, force, kind);
 
       return { skipped: false as const, connectorId };
     },
@@ -260,8 +293,8 @@ export function useStartSync() {
         duration: 6500,
       });
     },
-    onError: (err) => {
-      toast.error(friendlyQueueSyncError(err), { duration: 10_000 });
+    onError: (err, variables) => {
+      toast.error(friendlyQueueSyncError(err, variables?.kind), { duration: 10_000 });
     },
   });
 }

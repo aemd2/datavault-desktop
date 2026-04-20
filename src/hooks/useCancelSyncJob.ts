@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { supabase, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/supabase";
 import { friendlyQueueSyncError } from "@/lib/friendlySyncErrors";
 
 const CANCEL_SYNC_URL = `${SUPABASE_URL}/functions/v1/cancel-sync`;
@@ -22,6 +22,7 @@ export function useCancelSyncJob() {
         method: "POST",
         headers: {
           Authorization: `Bearer ${jwt}`,
+          apikey: SUPABASE_ANON_KEY,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ job_id: jobId }),

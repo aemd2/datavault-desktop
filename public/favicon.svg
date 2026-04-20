@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- DataVault favicon: shield (freedom/safety) + keyhole (data access) -->
+  <path fill="#0f172a" d="M16 2L4 7v7c0 7 5 12 12 16 7-4 12-9 12-16V7L16 2z"/>
+  <path fill="#38bdf8" fill-rule="evenodd" d="M16 10a4 4 0 1 1 0 8 4 4 0 0 1 0-8zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" clip-rule="evenodd"/>
+  <path fill="#38bdf8" d="M16 16v6h-1v-4h1z"/>
+</svg>

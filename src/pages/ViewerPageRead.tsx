@@ -2,7 +2,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotionPageBody } from "@/components/viewer/NotionPageBody";
+import { PushChangesButton } from "@/components/viewer/PushChangesButton";
 import { useNotionPage } from "@/hooks/useNotionPage";
+import { useLocalVaultPage } from "@/hooks/useLocalVaultPage";
 import { blocksFromRawJson } from "@/lib/notionBlocks";
 import { resolvePageTitle } from "@/lib/notionPageTitle";
 import { isLocalFirstVault } from "@/lib/dataVaultMode";
@@ -14,6 +16,7 @@ export function ViewerPageRead() {
   const { pageId } = useParams<{ pageId: string }>();
   const navigate = useNavigate();
   const { data: page, isLoading, error } = useNotionPage(pageId);
+  const { data: localMarkdown } = useLocalVaultPage(page?.connector_id, pageId);
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Opening page…</p>;
@@ -47,6 +50,18 @@ export function ViewerPageRead() {
           <ArrowLeft className="w-4 h-4" aria-hidden />
           All pages
         </Button>
+        {page.connector_id && pageId && localMarkdown ? (
+          <div className="ml-auto">
+            <PushChangesButton
+              connectorId={page.connector_id}
+              kind="notion"
+              entityId={pageId}
+              platformLabel="Notion"
+              expectedVersion={page.last_edited_time ?? undefined}
+              getContents={() => localMarkdown}
+            />
+          </div>
+        ) : null}
       </div>
 
       <header className="space-y-2 border-b border-border/60 pb-6">

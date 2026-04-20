@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { queryClient } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import NotFound from "./pages/NotFound.tsx";
 
@@ -12,8 +13,6 @@ const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Billing = lazy(() => import("./pages/Billing.tsx"));
 const Viewer = lazy(() => import("./pages/Viewer.tsx"));
 const Platforms = lazy(() => import("./pages/Platforms.tsx"));
-
-const queryClient = new QueryClient();
 
 const PageFallback = () => (
   <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">

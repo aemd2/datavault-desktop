@@ -61,14 +61,17 @@ export function AppTopNav({ active }: AppTopNavProps) {
           <button
             type="button"
             onClick={() => navigate("/dashboard")}
-            className="text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background flex items-center gap-3"
             aria-label="DataVault — back to dashboard"
           >
-            <p className="font-display text-xl font-bold">
-              <span className="text-foreground">Data</span>
-              <span className="text-gradient-gold">Vault</span>
-            </p>
-            <p className="text-xs text-muted-foreground">Your backup &amp; workspaces</p>
+            <img src="/favicon.svg" alt="" className="w-8 h-8 shrink-0" />
+            <span className="block">
+              <span className="font-display text-xl font-bold block leading-tight">
+                <span className="text-foreground">Data</span>
+                <span className="text-gradient-gold">Vault</span>
+              </span>
+              <span className="text-xs text-muted-foreground block">Your backup &amp; workspaces</span>
+            </span>
           </button>
           {subscription ? <PlanBadge plan={subscription.plan} /> : null}
         </div>

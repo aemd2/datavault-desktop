@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { supabase, SUPABASE_URL } from "@/lib/supabase";
 import { useSubscription } from "@/hooks/useSubscription";
+import { openExternalUrl } from "@/lib/marketingWeb";
 
 /** Base URL for Supabase Edge Functions. */
 const FN_BASE = `${SUPABASE_URL}/functions/v1`;
@@ -153,9 +154,11 @@ const BillingInner = () => {
     setUpgrading(true);
     try {
       const { url } = await callFn("create-checkout-session", { plan: planId });
-      window.location.href = url;
+      // Use system browser in Electron (main process blocks in-window navigation to https:).
+      await openExternalUrl(url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not start checkout.");
+    } finally {
       setUpgrading(false);
     }
   };
@@ -165,9 +168,10 @@ const BillingInner = () => {
     setOpeningPortal(true);
     try {
       const { url } = await callFn("create-portal-session", {});
-      window.location.href = url;
+      await openExternalUrl(url);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not open billing portal.");
+    } finally {
       setOpeningPortal(false);
     }
   };
