@@ -52,7 +52,11 @@ export function registerStandardOAuthHandler(): void {
           webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: true,
+            // sandbox: false is required so third-party OAuth consent pages
+            // (e.g. Todoist) can load their scripts and stylesheets correctly.
+            // The window only ever loads the platform's own consent page and is
+            // destroyed immediately after we intercept the callback redirect.
+            sandbox: false,
           },
         });
 
