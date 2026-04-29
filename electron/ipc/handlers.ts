@@ -4,12 +4,33 @@ import fs from "fs/promises";
 import { registerTrelloAuthHandler } from "./trelloAuth";
 import { registerStandardOAuthHandler } from "./standardOAuth";
 
+/** Path to the config file that stores the user-chosen vault location. */
+const VAULT_CONFIG_PATH = path.join(app.getPath("userData"), "vault-config.json");
+
+/** Read the stored vault root path. Returns null if the user hasn't chosen one yet. */
+async function getStoredVaultRoot(): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(VAULT_CONFIG_PATH, "utf8");
+    const cfg = JSON.parse(raw) as { vaultPath?: string };
+    return cfg.vaultPath ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Save the user-chosen vault root path to disk. */
+async function saveVaultRoot(vaultPath: string): Promise<void> {
+  await fs.writeFile(VAULT_CONFIG_PATH, JSON.stringify({ vaultPath }), "utf8");
+}
+
 /**
  * Resolve a caller-provided relative path against the user's vault folder.
+ * Uses the user-chosen path if set; falls back to {userData}/vault.
  * Rejects anything that escapes the vault root (path traversal guard).
  */
-function resolveVaultPath(relPath: string): string {
-  const vaultRoot = path.join(app.getPath("userData"), "vault");
+async function resolveVaultPath(relPath: string): Promise<string> {
+  const stored = await getStoredVaultRoot();
+  const vaultRoot = stored ?? path.join(app.getPath("userData"), "vault");
   const target = path.resolve(vaultRoot, relPath);
   if (!target.startsWith(vaultRoot + path.sep) && target !== vaultRoot) {
     throw new Error("Invalid vault path");
@@ -64,14 +85,14 @@ export function registerIpcHandlers(): void {
 
   // Write a text file inside the local vault folder (userData/vault/...).
   ipcMain.handle("vault:saveFile", async (_event, relPath: string, contents: string) => {
-    const target = resolveVaultPath(relPath);
+    const target = await resolveVaultPath(relPath);
     await fs.mkdir(path.dirname(target), { recursive: true });
     await fs.writeFile(target, contents, "utf8");
   });
 
   // Read a text file from the local vault folder. Returns null if missing.
   ipcMain.handle("vault:readFile", async (_event, relPath: string): Promise<string | null> => {
-    const target = resolveVaultPath(relPath);
+    const target = await resolveVaultPath(relPath);
     try {
       return await fs.readFile(target, "utf8");
     } catch (err) {
@@ -82,7 +103,7 @@ export function registerIpcHandlers(): void {
 
   // List files (recursively) under a vault subfolder. Returns relative paths.
   ipcMain.handle("vault:listFiles", async (_event, relPath: string): Promise<string[]> => {
-    const target = resolveVaultPath(relPath);
+    const target = await resolveVaultPath(relPath);
     const results: string[] = [];
     async function walk(dir: string, prefix: string): Promise<void> {
       let entries;
@@ -106,8 +127,36 @@ export function registerIpcHandlers(): void {
     return results;
   });
 
-  // Absolute vault root (for "Open in explorer" UX).
-  ipcMain.handle("vault:getRoot", () => path.join(app.getPath("userData"), "vault"));
+  // Absolute vault root — returns the user-chosen path if set, else default.
+  ipcMain.handle("vault:getRoot", async () => {
+    const stored = await getStoredVaultRoot();
+    return stored ?? path.join(app.getPath("userData"), "vault");
+  });
+
+  // Returns the stored vault path (null if not yet chosen by the user).
+  ipcMain.handle("vault:getStoredPath", () => getStoredVaultRoot());
+
+  // Returns a sensible default suggestion for the vault folder (user's Documents/DataVault).
+  ipcMain.handle("vault:getDefaultPath", () => {
+    return path.join(app.getPath("documents"), "DataVault");
+  });
+
+  /**
+   * Open a native folder picker so the user can choose where to store vault files.
+   * Saves the chosen path and returns it. Returns null if the user cancelled.
+   */
+  ipcMain.handle("vault:choosePath", async (event): Promise<string | null> => {
+    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+    const result = await dialog.showOpenDialog(parentWindow!, {
+      title: "Choose where DataVault saves your files",
+      buttonLabel: "Use this folder",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || result.filePaths.length === 0) return null;
+    const chosen = result.filePaths[0];
+    await saveVaultRoot(chosen);
+    return chosen;
+  });
 
   /**
    * Native folder picker for Obsidian vaults.

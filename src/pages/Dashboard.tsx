@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Shield, Layers } from "lucide-react";
+import { Plus, Shield, Layers, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppTopNav } from "@/components/AppTopNav";
@@ -30,6 +30,23 @@ function relativeTime(date: Date): string {
 const DashboardInner = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [vaultPath, setVaultPath] = useState<string | null>(null);
+  const [changingVault, setChangingVault] = useState(false);
+
+  // Load the current vault root path once on mount.
+  useEffect(() => {
+    window.electronAPI?.vault?.getRoot?.().then((p) => setVaultPath(p));
+  }, []);
+
+  const handleChangeVault = async () => {
+    setChangingVault(true);
+    try {
+      const picked = await window.electronAPI?.vault?.choosePath?.();
+      if (picked) setVaultPath(picked);
+    } finally {
+      setChangingVault(false);
+    }
+  };
   const { data: connectors = [], isLoading: loadingConn, error: connError } = useConnectors();
   const ids = connectors.map((c) => c.id);
   const { data: jobs = [], isLoading: loadingJobs, error: jobsError } = useSyncJobs(ids);
@@ -200,6 +217,30 @@ const DashboardInner = () => {
             </ErrorBoundary>
           </div>
         </section>
+
+        {/* Vault location */}
+        {vaultPath && (
+          <section className="rounded-xl border border-border/60 bg-card/40 px-5 py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3 min-w-0">
+              <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+              <div className="min-w-0">
+                <p className="text-xs font-medium text-foreground">Vault location</p>
+                <p className="text-xs text-muted-foreground truncate" title={vaultPath}>{vaultPath}</p>
+              </div>
+            </div>
+            {window.electronAPI?.vault?.choosePath && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={changingVault}
+                onClick={handleChangeVault}
+                className="shrink-0 self-start sm:self-auto text-xs"
+              >
+                {changingVault ? "Choosing…" : "Change"}
+              </Button>
+            )}
+          </section>
+        )}
 
       </main>
     </div>

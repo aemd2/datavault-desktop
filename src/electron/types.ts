@@ -5,8 +5,14 @@ export interface ElectronVaultAPI {
   readFile(relPath: string): Promise<string | null>;
   /** Recursively list files under a vault subfolder. Returns relative paths. */
   listFiles(relPath: string): Promise<string[]>;
-  /** Absolute path to the vault root (for "Open in explorer" UX). */
+  /** Absolute path to the vault root — user-chosen path or default. */
   getRoot(): Promise<string>;
+  /** Returns the stored custom vault path, or null if not yet chosen. */
+  getStoredPath(): Promise<string | null>;
+  /** Returns the default suggested vault path (Documents/DataVault). */
+  getDefaultPath(): Promise<string>;
+  /** Opens a native folder picker, saves the choice, returns the path (or null if cancelled). */
+  choosePath(): Promise<string | null>;
 }
 
 export interface ElectronAPI {

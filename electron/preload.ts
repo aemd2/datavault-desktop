@@ -39,8 +39,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     getVersion: () => ipcRenderer.invoke("app:version"),
   },
 
-  // Local vault filesystem bridge. Paths are resolved against userData/vault/
-  // in the main process with a path-traversal guard.
+  // Local vault filesystem bridge. Paths are resolved against the user-chosen
+  // vault folder (or {userData}/vault as default) in the main process.
   vault: {
     saveFile: (relPath: string, contents: string) =>
       ipcRenderer.invoke("vault:saveFile", relPath, contents) as Promise<void>,
@@ -49,6 +49,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     listFiles: (relPath: string) =>
       ipcRenderer.invoke("vault:listFiles", relPath) as Promise<string[]>,
     getRoot: () => ipcRenderer.invoke("vault:getRoot") as Promise<string>,
+    /** Returns the stored custom vault path, or null if not yet chosen. */
+    getStoredPath: () => ipcRenderer.invoke("vault:getStoredPath") as Promise<string | null>,
+    /** Returns the default suggested vault path (Documents/DataVault). */
+    getDefaultPath: () => ipcRenderer.invoke("vault:getDefaultPath") as Promise<string>,
+    /** Opens a native folder picker, saves the choice, returns the chosen path (or null if cancelled). */
+    choosePath: () => ipcRenderer.invoke("vault:choosePath") as Promise<string | null>,
   },
 
   // Obsidian vault picker. Unlike Notion/Airtable/etc., Obsidian has no cloud API —

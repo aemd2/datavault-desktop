@@ -13,12 +13,30 @@ const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const Billing = lazy(() => import("./pages/Billing.tsx"));
 const Viewer = lazy(() => import("./pages/Viewer.tsx"));
 const Platforms = lazy(() => import("./pages/Platforms.tsx"));
+const Onboarding = lazy(() => import("./pages/Onboarding.tsx"));
 
 const PageFallback = () => (
   <div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground text-sm">
     Loading…
   </div>
 );
+
+/**
+ * Checks whether a freshly-authenticated user should be sent to onboarding.
+ * Conditions: logged in + no connectors yet + "onboarding_done" not set.
+ */
+async function shouldShowOnboarding(userId: string): Promise<boolean> {
+  if (localStorage.getItem("onboarding_done")) return false;
+  try {
+    const { count } = await supabase
+      .from("connectors")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId);
+    return (count ?? 0) === 0;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Listens for datavault:// deep links from the main process.
@@ -41,12 +59,13 @@ function DeepLinkHandler() {
           const refreshToken = params.get("refresh_token");
 
           if (accessToken && refreshToken) {
-            const { error } = await supabase.auth.setSession({
+            const { error, data } = await supabase.auth.setSession({
               access_token: accessToken,
               refresh_token: refreshToken,
             });
-            if (!error) {
-              navigate("/dashboard", { replace: true });
+            if (!error && data.session) {
+              const needsOnboarding = await shouldShowOnboarding(data.session.user.id);
+              navigate(needsOnboarding ? "/onboarding" : "/dashboard", { replace: true });
               return;
             }
           }
@@ -88,6 +107,7 @@ const App = () => (
             <Route path="/billing" element={<Billing />} />
             <Route path="/viewer/*" element={<Viewer />} />
             <Route path="/platforms" element={<Platforms />} />
+            <Route path="/onboarding" element={<Onboarding />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

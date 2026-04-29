@@ -468,6 +468,24 @@ Deno.serve(async (req) => {
   const connectorId = body.connector_id;
   if (!connectorId) return jsonResp({ error: "connector_id required" }, 400);
 
+  // ── Plan enforcement (server-side, bypass-proof) ────────────────────────────
+  // Check the user's subscription plan against their connector count.
+  // This gate runs on every sync request — not just inserts — so it catches
+  // edge cases where a user downgrades after adding connectors.
+  // Skip for internal auto-backup triggers (service-role already authenticated).
+  if (!isInternal) {
+    const PLAN_LIMITS: Record<string, number> = { free: 1, managed: 3, enterprise: 9999 };
+    const { data: subRow } = await admin
+      .from("subscriptions").select("plan").eq("user_id", userId).maybeSingle();
+    const plan = subRow?.plan ?? "free";
+    const limit = PLAN_LIMITS[plan] ?? 1;
+    const { count: connCount } = await admin
+      .from("connectors").select("id", { count: "exact", head: true }).eq("user_id", userId);
+    if ((connCount ?? 0) > limit) {
+      return jsonResp({ error: "connector_limit_exceeded", plan, limit }, 403);
+    }
+  }
+
   // Wrap the rest of the handler in an IIFE so we can post-process the response
   // for internal (auto-backup) triggers without rewiring every return path —
   // record success/failure on connectors and self-invoke for chunked continuation.
