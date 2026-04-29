@@ -5,7 +5,7 @@
  * Returns: { url: string } — open in system browser
  *
  * Required Supabase secrets:
- *   STRIPE_SECRET_KEY         sk_live_... or sk_test_...
+ *   STRIPE_SECRET_KEY         sk_live_... or sk_test_... (Stripe secret key)
  *   STRIPE_PRICE_MANAGED      price_...  (€20/mo)
  *   STRIPE_PRICE_ENTERPRISE   price_...  (€80/mo)
  *   FRONTEND_URL              https://your-app-url (for success/cancel redirect)
@@ -20,17 +20,20 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PRICE_MAP: Record<string, string | undefined> = {
-  managed: Deno.env.get("STRIPE_PRICE_MANAGED"),
-  enterprise: Deno.env.get("STRIPE_PRICE_ENTERPRISE"),
-};
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
+    // Read secrets inside the handler — env vars are always fresh at call time
     const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-    if (!stripeKey) throw new Error("Stripe not configured");
+    if (!stripeKey) throw new Error("Missing secret: STRIPE_SECRET_KEY not set in Supabase Edge Function secrets");
+
+    const PRICE_MAP: Record<string, string | undefined> = {
+      managed: Deno.env.get("STRIPE_PRICE_MANAGED"),
+      enterprise: Deno.env.get("STRIPE_PRICE_ENTERPRISE"),
+    };
+    if (!PRICE_MAP.managed) throw new Error("Missing secret: STRIPE_PRICE_MANAGED not set");
+    if (!PRICE_MAP.enterprise) throw new Error("Missing secret: STRIPE_PRICE_ENTERPRISE not set");
 
     // Authenticate user
     const jwt = req.headers.get("Authorization")?.replace("Bearer ", "") ?? "";
@@ -55,7 +58,7 @@ Deno.serve(async (req) => {
     const plan = String(body?.plan ?? "");
     const priceId = PRICE_MAP[plan];
     if (!priceId) {
-      return new Response(JSON.stringify({ error: `Unknown plan: ${plan}` }), {
+      return new Response(JSON.stringify({ error: `Unknown or unsupported plan: "${plan}". Must be "managed" or "enterprise".` }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

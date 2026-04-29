@@ -62,7 +62,16 @@ const PLANS = [
 /** Call an Edge Function with the current user JWT. Returns parsed JSON. */
 async function callFn(path: string, body: object) {
   const { data, error } = await supabase.functions.invoke(path, { body });
-  if (error) throw new Error(error.message || "Request failed");
+  if (error) {
+    // supabase.functions.invoke wraps the body in error.context for non-2xx
+    const detail =
+      (error as { context?: { error?: string } }).context?.error ??
+      (data as { error?: string } | null)?.error ??
+      error.message ??
+      "Request failed";
+    throw new Error(detail);
+  }
+  if (data?.error) throw new Error(data.error);
   return data;
 }
 
