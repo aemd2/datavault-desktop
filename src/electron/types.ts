@@ -34,6 +34,30 @@ export interface ElectronAPI {
       cancelled?: true;
     }>;
   };
+  /**
+   * Obsidian local vault bridge. Obsidian has no cloud API, so "connecting"
+   * means picking a local folder. The main process validates it's a vault
+   * (contains `.obsidian/`) and returns a `.md` file count for the UI.
+   */
+  obsidian: {
+    pickVault(): Promise<{
+      success: boolean;
+      cancelled?: true;
+      error?: string;
+      /** Absolute path to the chosen folder, stored in `connectors.workspace_id`. */
+      absolutePath?: string;
+      /** Folder basename, stored in `connectors.workspace_name`. */
+      vaultName?: string;
+      /** Count of `.md` files found, excluding `.obsidian/` and `.trash/`. */
+      markdownFileCount?: number;
+    }>;
+    /** Recount markdown files in an already-connected vault (Sync Now). */
+    rescanVault(absolutePath: string): Promise<number>;
+    /** List all `.md` notes in the vault as `{relativePath, name}[]`. */
+    listNotes(absolutePath: string): Promise<{ relativePath: string; name: string }[]>;
+    /** Read raw Markdown content of a single note. */
+    readNote(vaultRoot: string, relativePath: string): Promise<string>;
+  };
 }
 
 // Augment the global Window interface so TypeScript knows about window.electronAPI

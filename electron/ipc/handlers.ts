@@ -1,4 +1,4 @@
-import { ipcMain, app } from "electron";
+import { ipcMain, app, dialog, BrowserWindow } from "electron";
 import path from "path";
 import fs from "fs/promises";
 import { registerTrelloAuthHandler } from "./trelloAuth";
@@ -15,6 +15,43 @@ function resolveVaultPath(relPath: string): string {
     throw new Error("Invalid vault path");
   }
   return target;
+}
+
+/** Result returned to the renderer by `obsidian:pickVault`. */
+interface ObsidianPickResult {
+  success: boolean;
+  cancelled?: true;
+  error?: string;
+  absolutePath?: string;
+  vaultName?: string;
+  markdownFileCount?: number;
+}
+
+/**
+ * Recursively count `.md` files under a folder.
+ * Skips `.obsidian/` and `.trash/` — those are Obsidian's own state, not notes.
+ */
+async function countObsidianMarkdownFiles(root: string): Promise<number> {
+  let count = 0;
+  async function walk(dir: string): Promise<void> {
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (entry.name === ".obsidian" || entry.name === ".trash") continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+        count++;
+      }
+    }
+  }
+  await walk(root);
+  return count;
 }
 
 export function registerIpcHandlers(): void {
@@ -71,4 +108,137 @@ export function registerIpcHandlers(): void {
 
   // Absolute vault root (for "Open in explorer" UX).
   ipcMain.handle("vault:getRoot", () => path.join(app.getPath("userData"), "vault"));
+
+  /**
+   * Native folder picker for Obsidian vaults.
+   *
+   * Obsidian has no cloud API, so "connecting" means pointing at a local folder
+   * and validating it looks like a vault (has a `.obsidian/` subfolder).
+   *
+   * Returns the absolute path, vault name, and `.md` file count so the renderer
+   * can create a `connectors` row and show useful stats without re-scanning.
+   */
+  ipcMain.handle("obsidian:pickVault", async (event): Promise<ObsidianPickResult> => {
+    // Anchor the dialog to the window that fired the event so it feels modal.
+    const parentWindow = BrowserWindow.fromWebContents(event.sender) ?? undefined;
+
+    const result = await dialog.showOpenDialog(parentWindow!, {
+      title: "Select your Obsidian vault folder",
+      buttonLabel: "Use this folder",
+      properties: ["openDirectory"],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, cancelled: true };
+    }
+
+    const absolutePath = result.filePaths[0];
+    const vaultName = path.basename(absolutePath);
+
+    // Validate it's an Obsidian vault — the `.obsidian/` folder is created the
+    // first time Obsidian opens a folder, so its presence is a reliable signal.
+    const obsidianMarker = path.join(absolutePath, ".obsidian");
+    try {
+      const stat = await fs.stat(obsidianMarker);
+      if (!stat.isDirectory()) {
+        return {
+          success: false,
+          error: "That folder doesn't look like an Obsidian vault (no .obsidian folder inside). Open it once in Obsidian first.",
+        };
+      }
+    } catch {
+      return {
+        success: false,
+        error: "That folder doesn't look like an Obsidian vault (no .obsidian folder inside). Open it once in Obsidian first.",
+      };
+    }
+
+    const markdownFileCount = await countObsidianMarkdownFiles(absolutePath);
+
+    return {
+      success: true,
+      absolutePath,
+      vaultName,
+      markdownFileCount,
+    };
+  });
+
+  /** Refresh the `.md` count for an existing Obsidian vault (used by Sync Now). */
+  ipcMain.handle("obsidian:rescanVault", async (_event, absolutePath: string): Promise<number> => {
+    if (typeof absolutePath !== "string" || absolutePath.length === 0) {
+      throw new Error("Missing vault path");
+    }
+    // Verify the path still exists and still has the `.obsidian/` marker — the
+    // user could have moved or deleted the folder between sessions.
+    const marker = path.join(absolutePath, ".obsidian");
+    const stat = await fs.stat(marker).catch(() => null);
+    if (!stat || !stat.isDirectory()) {
+      throw new Error("Vault folder is missing or no longer an Obsidian vault.");
+    }
+    return countObsidianMarkdownFiles(absolutePath);
+  });
+
+  /**
+   * List all `.md` files in an Obsidian vault.
+   * Returns `{ relativePath, name }[]` sorted alphabetically — the browse panel
+   * uses this to populate its file list without counting every entry.
+   * Skips `.obsidian/` and `.trash/` (same as the counter above).
+   */
+  ipcMain.handle(
+    "obsidian:listNotes",
+    async (_event, absolutePath: string): Promise<{ relativePath: string; name: string }[]> => {
+      if (typeof absolutePath !== "string" || absolutePath.length === 0) {
+        throw new Error("Missing vault path");
+      }
+      const marker = path.join(absolutePath, ".obsidian");
+      const stat = await fs.stat(marker).catch(() => null);
+      if (!stat || !stat.isDirectory()) {
+        throw new Error("Vault folder is missing or no longer an Obsidian vault.");
+      }
+
+      const notes: { relativePath: string; name: string }[] = [];
+      async function walkNotes(dir: string, prefix: string): Promise<void> {
+        let entries;
+        try {
+          entries = await fs.readdir(dir, { withFileTypes: true });
+        } catch {
+          return;
+        }
+        for (const entry of entries) {
+          if (entry.name === ".obsidian" || entry.name === ".trash") continue;
+          const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+          if (entry.isDirectory()) {
+            await walkNotes(path.join(dir, entry.name), rel);
+          } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
+            notes.push({ relativePath: rel, name: entry.name.replace(/\.md$/i, "") });
+          }
+        }
+      }
+      await walkNotes(absolutePath, "");
+      notes.sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+      return notes;
+    },
+  );
+
+  /**
+   * Read the raw Markdown content of a single note.
+   * `absolutePath` is the vault root; `relativePath` is the note's path within
+   * the vault (as returned by `obsidian:listNotes`).
+   * Path-traversal guard: the resolved path must stay inside absolutePath.
+   */
+  ipcMain.handle(
+    "obsidian:readNote",
+    async (_event, vaultRoot: string, relativePath: string): Promise<string> => {
+      if (typeof vaultRoot !== "string" || typeof relativePath !== "string") {
+        throw new Error("Invalid arguments");
+      }
+      const target = path.resolve(vaultRoot, relativePath);
+      // Guard against path traversal
+      if (!target.startsWith(path.resolve(vaultRoot) + path.sep) &&
+          target !== path.resolve(vaultRoot)) {
+        throw new Error("Invalid note path");
+      }
+      return fs.readFile(target, "utf8");
+    },
+  );
 }

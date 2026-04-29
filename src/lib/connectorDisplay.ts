@@ -30,9 +30,20 @@ export function friendlyConnectorLabel(type: string): string {
       return "Airtable";
     case "google-sheets":
       return "Google Sheets";
+    case "obsidian":
+      return "Obsidian";
     default:
       return type.charAt(0).toUpperCase() + type.slice(1);
   }
+}
+
+/**
+ * Obsidian is local-only — it has no Edge Function and no `run-sync` support.
+ * The Dashboard card uses this check to swap "Sync Now" for a local rescan
+ * and hide "Full re-sync".
+ */
+export function isLocalOnlyConnector(type: string): boolean {
+  return type.toLowerCase() === "obsidian";
 }
 
 /** Back-compat name — same as {@link friendlyConnectorLabel}. */

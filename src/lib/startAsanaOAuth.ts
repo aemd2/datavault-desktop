@@ -1,51 +1,28 @@
-import { toast } from "sonner";
-import { queryClient } from "@/lib/queryClient";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { openSupabaseOAuthInBrowser } from "@/lib/oauth/openSupabaseOAuthInBrowser";
 
 /**
- * Asana OAuth2 via Electron BrowserWindow — same pattern as Trello/Todoist.
- * The BrowserWindow intercepts the ?code= redirect in the main process,
- * POSTs it to the Edge Function exchange endpoint, and closes.
- * No HTML page is rendered — avoids Supabase's text/plain limitation.
+ * Asana OAuth2 via the system browser.
+ *
+ * Why system browser (not BrowserWindow):
+ *   app.asana.com is a full React SPA. After the Asana login step inside a
+ *   BrowserWindow the consent/redirect flow breaks due to SPA navigation quirks
+ *   and Google Sign-In popups not working in sandboxed Electron windows.
+ *   Opening in the real system browser gives the user their normal Asana session
+ *   and a clean consent screen.
+ *
+ * Flow:
+ *   1. System browser opens asana-oauth?action=start → edge function redirects
+ *      to https://app.asana.com/-/oauth_authorize.
+ *   2. User approves → Asana sends ?code= to the Supabase callback URL.
+ *   3. Edge function exchanges code, upserts connector, redirects to datavault://dashboard.
+ *   4. DeepLinkHandler in App.tsx navigates to /dashboard and refreshes connectors.
  */
 export async function startAsanaOAuth(): Promise<void> {
-  const { data } = await supabase.auth.getSession();
-  const jwt = data.session?.access_token;
-  if (!jwt) {
-    toast.error("Please sign in first.");
-    return;
-  }
-
-  const startUrl = `${SUPABASE_URL}/functions/v1/asana-oauth?action=start&token=${encodeURIComponent(jwt)}`;
-  const exchangeUrl = `${SUPABASE_URL}/functions/v1/asana-oauth/callback?action=exchange`;
-  const callbackPath = "/functions/v1/asana-oauth/callback";
-
-  const isElectron = typeof window !== "undefined" && !!window.electronAPI?.oauth;
-
-  if (isElectron) {
-    toast.message("Asana is opening…", {
-      description: "Approve access to your workspaces and projects so DataVault can back them up.",
-      duration: 20_000,
-    });
-
-    const result = await window.electronAPI!.oauth.connect({
-      startUrl,
-      exchangeUrl,
-      callbackPath,
-      platformName: "Asana",
-    });
-
-    toast.dismiss();
-
-    if (result.success) {
-      void queryClient.invalidateQueries({ queryKey: ["connectors"] });
-      toast.success("Asana connected! Go to the Dashboard to run your first sync.");
-    } else if (!result.cancelled) {
-      toast.error(result.error ?? "Failed to connect Asana. Please try again.");
-    }
-    return;
-  }
-
-  // Web fallback.
-  window.location.href = startUrl;
+  return openSupabaseOAuthInBrowser({
+    kind: "asana",
+    toastTitle: "Asana is opening in your browser",
+    toastDescription:
+      "Sign in to Asana and approve access in the browser tab that just opened. The app will update automatically when done.",
+    toastDurationMs: 30_000,
+  });
 }

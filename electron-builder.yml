@@ -11,6 +11,13 @@ files:
   - dist-electron/**/*
   - package.json
 
+extraResources:
+  - from: build-resources
+    to: build-resources
+    filter:
+      - "icon.ico"
+      - "icon.png"
+
 asar: true
 
 win:

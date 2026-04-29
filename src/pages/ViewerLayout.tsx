@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button";
 import { AppTopNav } from "@/components/AppTopNav";
 import { Label } from "@/components/ui/label";
 import { PageSidebarTree } from "@/components/viewer/PageSidebarTree";
-import { TrelloSidebarBoards } from "@/components/viewer/TrelloSidebarBoards";
 import { DownloadBackupButton } from "@/components/viewer/DownloadBackupButton";
 import { useConnectors } from "@/hooks/useConnectors";
 import { useNotionPages } from "@/hooks/useNotionPages";
-import { useTrelloBoards } from "@/hooks/useTrelloData";
 import { isLocalFirstVault } from "@/lib/dataVaultMode";
 import { friendlyConnectorLabel } from "@/lib/connectorDisplay";
 import type { ViewerOutletContext } from "@/pages/viewerTypes";
@@ -24,6 +22,7 @@ export function ViewerLayout() {
 
   const pageMatch = useMatch("/viewer/page/:pageId");
   const activePageId = pageMatch?.params.pageId;
+  const isPageReader = !!pageMatch;
 
   const singleWorkspaceName =
     connectors.length === 1 ? (connectors[0].workspace_name ?? "Your workspace") : null;
@@ -36,15 +35,14 @@ export function ViewerLayout() {
   );
 
   const selectedConn = connectors.find((c) => c.id === resolvedConnectorId);
-  const connectorType = selectedConn?.type?.toLowerCase() || "notion";
+  // When no specific connector is chosen ("All workspaces"), use the special "all" type
+  // so ViewerBrowse renders an overview instead of defaulting to the Notion panel.
+  const connectorType = selectedConn?.type?.toLowerCase() ?? (connectors.length > 1 ? "all" : "notion");
   const connectorLabel = selectedConn
     ? friendlyConnectorLabel(selectedConn.type || "notion")
     : singleWorkspaceName || "Your workspace";
 
   const { data: sidebarPages = [] } = useNotionPages(selectedConnector);
-  const { data: trelloSidebarBoards = [] } = useTrelloBoards(
-    connectorType === "trello" ? resolvedConnectorId : undefined,
-  );
 
   // Pass type and label so ViewerBrowse can show correct copy and components for Trello vs Notion.
   // `selectedConnector` uses resolved id so a single Trello-only account still loads `trello_*` rows.
@@ -53,6 +51,7 @@ export function ViewerLayout() {
     setSelectedConnector,
     connectorType,
     connectorLabel,
+    connectors,
   };
 
   return (
@@ -85,11 +84,23 @@ export function ViewerLayout() {
                   aria-label="Choose workspace"
                 >
                   <option value="">All workspaces</option>
-                  {connectors.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.workspace_name ?? `Workspace (${c.id.slice(0, 8)}…)`}
-                    </option>
-                  ))}
+                  {connectors.map((c) => {
+                    const platform = friendlyConnectorLabel(c.type || "notion");
+                    const name = c.workspace_name?.trim();
+                    // Show "Platform — name" when the name adds info beyond the platform label.
+                    // Avoid "Notion — Emil Donchew's Notion" (redundant) → just "Notion".
+                    // Avoid showing raw emails as the primary label.
+                    const isEmail = name ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(name) : false;
+                    const isRedundant = name
+                      ? name.toLowerCase().includes(platform.toLowerCase())
+                      : false;
+                    const suffix = name && !isEmail && !isRedundant ? ` — ${name}` : "";
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {platform}{suffix}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             )}
@@ -122,11 +133,15 @@ export function ViewerLayout() {
           </div>
         ) : (
           <>
-            {connectorType === "trello" ? (
-              <TrelloSidebarBoards boards={trelloSidebarBoards} />
-            ) : (
+            {/*
+              Outer sidebar is only useful on the Notion page reader (/viewer/page/:pageId),
+              where users navigate between pages. On the browse index, every connector panel
+              has its own internal sidebar/layout — keeping the outer rail there made Notion
+              and Trello look inconsistent vs Asana/Todoist/Airtable/Google Sheets.
+            */}
+            {isPageReader && connectorType === "notion" ? (
               <PageSidebarTree pages={sidebarPages} activePageId={activePageId} />
-            )}
+            ) : null}
             <div className="flex-1 min-w-0 min-h-0">
               {singleWorkspaceName && (
                 <p className="text-sm text-muted-foreground mb-4">

@@ -51,12 +51,21 @@ function handleDeepLink(url: string): void {
 // ── Window ──────────────────────────────────────────────────────────────────
 
 function createWindow(): void {
+  // Window icon — shown in taskbar (Windows) and title bar.
+  // In dev the project root has build-resources; in production electron-builder
+  // copies build-resources next to the asar at process.resourcesPath.
+  const iconExt = process.platform === "win32" ? "ico" : "png";
+  const iconPath = isDev
+    ? path.join(process.cwd(), "build-resources", `icon.${iconExt}`)
+    : path.join(process.resourcesPath, "build-resources", `icon.${iconExt}`);
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 900,
     minHeight: 600,
     title: "DataVault",
+    icon: iconPath,
     webPreferences: {
       // Security: renderer has no Node.js access — only contextBridge API
       contextIsolation: true,
@@ -92,7 +101,18 @@ function createWindow(): void {
   // Apply Content Security Policy to app responses only.
   // Skip the CSP override for external OAuth pages (Trello, Atlassian CDN)
   // so their own scripts can load normally inside the OAuth popup window.
-  const OAUTH_HOSTS = ["trello.com", "atlassian.com", "atl-paas.net", "atlassian.net"];
+  const OAUTH_HOSTS = [
+    // Trello / Atlassian
+    "trello.com", "atlassian.com", "atl-paas.net", "atlassian.net",
+    // Todoist
+    "todoist.com",
+    // Asana
+    "asana.com",
+    // Airtable
+    "airtable.com",
+    // Google (Sheets, Drive, accounts)
+    "google.com", "accounts.google.com", "googleapis.com", "gstatic.com",
+  ];
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     const isOAuthPage = OAUTH_HOSTS.some((h) => details.url.includes(h));
     if (isOAuthPage) {

@@ -1,51 +1,27 @@
-import { toast } from "sonner";
-import { queryClient } from "@/lib/queryClient";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { openSupabaseOAuthInBrowser } from "@/lib/oauth/openSupabaseOAuthInBrowser";
 
 /**
- * Todoist OAuth2 via Electron BrowserWindow — same pattern as Trello.
- * The BrowserWindow intercepts the ?code= redirect in the main process,
- * POSTs it to the Edge Function exchange endpoint, and closes.
- * No HTML page is rendered — avoids Supabase's text/plain limitation.
+ * Todoist OAuth2 via the system browser.
+ *
+ * Why system browser (not BrowserWindow):
+ *   Todoist's consent page lives at app.todoist.com which is a full React SPA.
+ *   That SPA relies on Service Workers and modern browser APIs that fail to
+ *   bootstrap inside an Electron BrowserWindow, producing "couldn't load
+ *   the required files". Opening in the real system browser avoids this.
+ *
+ * Flow:
+ *   1. System browser opens todoist-oauth?action=start → edge function redirects
+ *      to https://todoist.com/oauth/authorize.
+ *   2. User approves → Todoist sends ?code= to the Supabase callback URL.
+ *   3. Edge function exchanges code, upserts connector, redirects to datavault://dashboard.
+ *   4. DeepLinkHandler in App.tsx navigates to /dashboard and refreshes connectors.
  */
 export async function startTodoistOAuth(): Promise<void> {
-  const { data } = await supabase.auth.getSession();
-  const jwt = data.session?.access_token;
-  if (!jwt) {
-    toast.error("Please sign in first.");
-    return;
-  }
-
-  const startUrl = `${SUPABASE_URL}/functions/v1/todoist-oauth?action=start&token=${encodeURIComponent(jwt)}`;
-  const exchangeUrl = `${SUPABASE_URL}/functions/v1/todoist-oauth/callback?action=exchange`;
-  const callbackPath = "/functions/v1/todoist-oauth/callback";
-
-  const isElectron = typeof window !== "undefined" && !!window.electronAPI?.oauth;
-
-  if (isElectron) {
-    toast.message("Todoist is opening…", {
-      description: "Approve read and write access so DataVault can back up your projects and tasks.",
-      duration: 20_000,
-    });
-
-    const result = await window.electronAPI!.oauth.connect({
-      startUrl,
-      exchangeUrl,
-      callbackPath,
-      platformName: "Todoist",
-    });
-
-    toast.dismiss();
-
-    if (result.success) {
-      void queryClient.invalidateQueries({ queryKey: ["connectors"] });
-      toast.success("Todoist connected! Go to the Dashboard to run your first sync.");
-    } else if (!result.cancelled) {
-      toast.error(result.error ?? "Failed to connect Todoist. Please try again.");
-    }
-    return;
-  }
-
-  // Web fallback.
-  window.location.href = startUrl;
+  return openSupabaseOAuthInBrowser({
+    kind: "todoist",
+    toastTitle: "Todoist is opening in your browser",
+    toastDescription:
+      "Approve access in the browser tab that just opened. The app will update automatically when done.",
+    toastDurationMs: 30_000,
+  });
 }

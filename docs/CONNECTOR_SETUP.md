@@ -20,12 +20,15 @@ page will start working.
 Every Edge Function callback URL has the same shape:
 
 ```
-https://<your-supabase-ref>.functions.supabase.co/<fn-name>/callback
+https://YOUR_SUPABASE_PROJECT_REF.supabase.co/functions/v1/FN_NAME/callback
 ```
 
-Register **exactly** this URL on the platform's developer portal — no
-trailing slash, no `www`. Replace `<fn-name>` with the Edge Function
-name from each section below.
+Register **exactly** this URL on the platform’s developer portal — no
+trailing slash, no `www`. Use the same **Reference ID** as in your project
+**URL** (Supabase → Project Settings → General → Reference ID). Do **not**
+paste angle brackets or words like `YOUR_SUPABASE_PROJECT_REF` into
+Airtable or Google — only the real id. Replace `FN_NAME` with the Edge
+Function name from each section below.
 
 After the callback completes, the Edge Function redirects the browser
 to `datavault://dashboard`, which the Electron main process forwards to
@@ -87,7 +90,8 @@ the app via the `deep-link` IPC channel
   - `user.email:read` (optional — for per-user labelling)
 - **Supabase secrets:**
   - `AIRTABLE_CLIENT_ID`
-  - `AIRTABLE_CLIENT_SECRET` (only if the app type is "confidential")
+  - `AIRTABLE_CLIENT_SECRET` (only if the app type is "confidential"; omit for PKCE-only public clients)
+  - `OAUTH_STATE_SECRET` (optional — if unset, the Edge Function signs PKCE `state` with `SERVICE_ROLE_KEY`)
 - **Rate limit:** 5 requests / sec per base. Sync each base serially.
 
 ## 5. Google Sheets
@@ -104,6 +108,7 @@ the app via the `deep-link` IPC channel
 - **Scopes:**
   - `https://www.googleapis.com/auth/spreadsheets` (read + write Sheets)
   - `https://www.googleapis.com/auth/drive.readonly` (list user's spreadsheets)
+  - `https://www.googleapis.com/auth/userinfo.email` (so the connector row can show the Google account email)
 - **Supabase secrets:**
   - `GOOGLE_CLIENT_ID`
   - `GOOGLE_CLIENT_SECRET`

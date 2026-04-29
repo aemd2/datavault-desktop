@@ -36,6 +36,10 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { pageToMarkdown, blocksToMarkdown, renderProperty, type NotionBlock } from "./notionMarkdown.ts";
 import { handleTrelloSyncChunk } from "./trelloSync.ts";
+import { handleTodoistSyncChunk } from "./todoistSync.ts";
+import { handleAsanaSyncChunk } from "./asanaSync.ts";
+import { handleAirtableSyncChunk } from "./airtableSync.ts";
+import { handleGoogleSheetsSyncChunk } from "./googleSheetsSync.ts";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -425,15 +429,18 @@ Deno.serve(async (req) => {
   if (!supabaseUrl || !serviceRoleKey) return jsonResp({ error: "Server not configured", code: "NOT_CONFIGURED" }, 500);
 
   const authHeader = req.headers.get("Authorization") ?? "";
-  const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (!jwt) return jsonResp({ error: "Authorization required" }, 401);
+  const presentedToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (!presentedToken) return jsonResp({ error: "Authorization required" }, 401);
+
+  // Internal-trigger path (auto-backup): the tick function (`auto-sync-tick`)
+  // calls us with the service-role key and an `x-internal-trigger` header.
+  // When that matches, skip user-JWT validation and read user_id from the body.
+  const internalTrigger = req.headers.get("x-internal-trigger") ?? "";
+  const isInternal = internalTrigger === "auto-backup" && presentedToken === serviceRoleKey;
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
-  const { data: userData, error: authError } = await admin.auth.getUser(jwt);
-  if (authError || !userData?.user) return jsonResp({ error: "Invalid or expired session" }, 401);
-  const userId = userData.user.id;
 
-  // ── Parse body ─────────────────────────────────────────────────────────────
+  // ── Parse body (we need user_id from the body for internal calls) ─────────
   let body: {
     connector_id?: string; job_id?: string; cursor?: string;
     page_count?: number; db_count?: number; row_count?: number;
@@ -443,11 +450,29 @@ Deno.serve(async (req) => {
     users_fetched?: boolean;
     /** Trello (etc.) continuation — echoed from needs_more responses. */
     kind_state?: Record<string, unknown>;
+    /** Only honoured when `x-internal-trigger: auto-backup` is set. */
+    user_id?: string;
   };
   try { body = await req.json(); } catch { return jsonResp({ error: "Invalid JSON body" }, 400); }
 
+  let userId: string;
+  if (isInternal) {
+    if (!body.user_id) return jsonResp({ error: "user_id required for internal trigger" }, 400);
+    userId = body.user_id;
+  } else {
+    const { data: userData, error: authError } = await admin.auth.getUser(presentedToken);
+    if (authError || !userData?.user) return jsonResp({ error: "Invalid or expired session" }, 401);
+    userId = userData.user.id;
+  }
+
   const connectorId = body.connector_id;
   if (!connectorId) return jsonResp({ error: "connector_id required" }, 400);
+
+  // Wrap the rest of the handler in an IIFE so we can post-process the response
+  // for internal (auto-backup) triggers without rewiring every return path —
+  // record success/failure on connectors and self-invoke for chunked continuation.
+  // For user-triggered calls this wrapper is transparent.
+  const resp = await (async (): Promise<Response> => {
 
   let searchCursor: string | undefined = body.cursor ?? undefined;
   let pageCount = body.page_count ?? 0;
@@ -467,7 +492,10 @@ Deno.serve(async (req) => {
 
   // ── Verify connector ──────────────────────────────────────────────────────
   const { data: connector, error: connErr } = await admin
-    .from("connectors").select("id, user_id, access_token, type").eq("id", connectorId).maybeSingle();
+    .from("connectors")
+    .select("id, user_id, access_token, refresh_token, token_expires_at, type")
+    .eq("id", connectorId)
+    .maybeSingle();
   if (connErr || !connector) return jsonResp({ error: "Connector not found" }, 404);
   if (connector.user_id !== userId) return jsonResp({ error: "Not your connector" }, 403);
   const notionToken = connector.access_token as string;
@@ -510,9 +538,9 @@ Deno.serve(async (req) => {
     if (pending && pending.length > 0) {
       jobId = pending[0].id;
       const startStep =
-        connectorDbType.toLowerCase() === "trello"
-          ? "Starting Trello backup…"
-          : "Counting items in your Notion workspace…";
+        connectorDbType.toLowerCase() === "notion"
+          ? "Counting items in your Notion workspace…"
+          : `Starting ${connectorSourceLabel(connectorDbType)} backup…`;
       await admin.from("sync_jobs").update({
         status: "running", started_at: new Date().toISOString(),
         progress_pct: 3,
@@ -556,6 +584,48 @@ Deno.serve(async (req) => {
       trelloToken: notionToken,
       chunkStart,
       body: body as unknown as Record<string, unknown>,
+    });
+  }
+  if (connectorKind === "todoist") {
+    return await handleTodoistSyncChunk(admin, {
+      userId,
+      connectorId,
+      jobId,
+      token: notionToken,
+      chunkStart,
+    });
+  }
+  if (connectorKind === "asana") {
+    return await handleAsanaSyncChunk(admin, {
+      userId,
+      connectorId,
+      jobId,
+      token: notionToken,
+      refreshToken: (connector as { refresh_token?: string | null }).refresh_token ?? null,
+      tokenExpiresAt: (connector as { token_expires_at?: string | null }).token_expires_at ?? null,
+      chunkStart,
+    });
+  }
+  if (connectorKind === "airtable") {
+    return await handleAirtableSyncChunk(admin, {
+      userId,
+      connectorId,
+      jobId,
+      token: notionToken,
+      refreshToken: (connector as { refresh_token?: string | null }).refresh_token ?? null,
+      tokenExpiresAt: (connector as { token_expires_at?: string | null }).token_expires_at ?? null,
+      chunkStart,
+    });
+  }
+  if (connectorKind === "google-sheets" || connectorKind === "google_sheets") {
+    return await handleGoogleSheetsSyncChunk(admin, {
+      userId,
+      connectorId,
+      jobId,
+      token: notionToken,
+      refreshToken: (connector as { refresh_token?: string | null }).refresh_token ?? null,
+      tokenExpiresAt: (connector as { token_expires_at?: string | null }).token_expires_at ?? null,
+      chunkStart,
     });
   }
   if (connectorKind !== "notion") {
@@ -1032,4 +1102,62 @@ Deno.serve(async (req) => {
     }).eq("id", jobId);
     return jsonResp({ status: "failed", error: message.slice(0, 500) }, 500);
   }
+
+  })(); // ── end of handler IIFE ────────────────────────────────────────────
+
+  // ── Internal-trigger post-processing ─────────────────────────────────────
+  // For auto-backup runs: record outcome on connectors + drive the next chunk
+  // ourselves (no client is polling). User-triggered runs return as-is.
+  if (isInternal) {
+    try {
+      const cloned = resp.clone();
+      const payload = (await cloned.json()) as Record<string, unknown>;
+      const statusVal = String(payload.status ?? "");
+      const nowIso = new Date().toISOString();
+
+      if (statusVal === "done") {
+        await admin
+          .from("connectors")
+          .update({
+            auto_backup_last_error: null,
+            auto_backup_last_attempt_at: nowIso,
+          })
+          .eq("id", connectorId);
+      } else if (statusVal === "failed" || statusVal === "cancelled") {
+        const errMsg = String(payload.error ?? "Auto-backup failed");
+        await admin
+          .from("connectors")
+          .update({
+            auto_backup_last_error: errMsg.slice(0, 500),
+            auto_backup_last_attempt_at: nowIso,
+          })
+          .eq("id", connectorId);
+      } else if (statusVal === "needs_more") {
+        // Drive the next chunk ourselves — no client is polling.
+        const next: Record<string, unknown> = { ...payload, user_id: userId };
+        delete next.status;
+        const fireNext = fetch(`${supabaseUrl}/functions/v1/run-sync`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${serviceRoleKey}`,
+            "x-internal-trigger": "auto-backup",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(next),
+        }).catch((err) =>
+          console.warn("[run-sync] auto-backup continuation failed:", err),
+        );
+
+        // @ts-expect-error EdgeRuntime is provided by the Supabase Edge runtime.
+        if (typeof EdgeRuntime !== "undefined" && EdgeRuntime?.waitUntil) {
+          // @ts-expect-error see above
+          EdgeRuntime.waitUntil(fireNext);
+        }
+      }
+    } catch (err) {
+      console.warn("[run-sync] internal post-process failed:", err);
+    }
+  }
+
+  return resp;
 });

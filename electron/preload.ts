@@ -50,4 +50,28 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.invoke("vault:listFiles", relPath) as Promise<string[]>,
     getRoot: () => ipcRenderer.invoke("vault:getRoot") as Promise<string>,
   },
+
+  // Obsidian vault picker. Unlike Notion/Airtable/etc., Obsidian has no cloud API —
+  // "connecting" means pointing at a local folder and validating it's a vault.
+  obsidian: {
+    pickVault: () =>
+      ipcRenderer.invoke("obsidian:pickVault") as Promise<{
+        success: boolean;
+        cancelled?: true;
+        error?: string;
+        absolutePath?: string;
+        vaultName?: string;
+        markdownFileCount?: number;
+      }>,
+    rescanVault: (absolutePath: string) =>
+      ipcRenderer.invoke("obsidian:rescanVault", absolutePath) as Promise<number>,
+    /** Returns all `.md` notes in the vault as `{relativePath, name}[]`. */
+    listNotes: (absolutePath: string) =>
+      ipcRenderer.invoke("obsidian:listNotes", absolutePath) as Promise<
+        { relativePath: string; name: string }[]
+      >,
+    /** Reads and returns the raw Markdown content of a note. */
+    readNote: (vaultRoot: string, relativePath: string) =>
+      ipcRenderer.invoke("obsidian:readNote", vaultRoot, relativePath) as Promise<string>,
+  },
 });

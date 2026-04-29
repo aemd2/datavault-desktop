@@ -55,6 +55,10 @@ function DeepLinkHandler() {
         }
 
         if (parsed.hostname === "dashboard") {
+          // Invalidate connectors so a newly-linked platform shows up immediately
+          // without the user needing to reload. This fires after system-browser OAuth
+          // (Todoist, Asana, etc.) redirect back via datavault://dashboard.
+          void queryClient.invalidateQueries({ queryKey: ["connectors"] });
           navigate("/dashboard", { replace: true });
           return;
         }

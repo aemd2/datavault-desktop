@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { LayoutGrid } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNotionDatabases, type NotionDatabaseRow } from "@/hooks/useNotionDatabases";
+import { PanelSkeleton } from "./BrowsePanelKit";
 
 function DatabaseCard({ db }: { db: NotionDatabaseRow }) {
   return (
@@ -27,7 +28,7 @@ export function DatabaseList({ connectorId }: DatabaseListProps) {
   const { data: databases = [], isLoading, error } = useNotionDatabases(connectorId);
 
   if (isLoading) {
-    return <p className="text-sm text-muted-foreground">Loading your tables…</p>;
+    return <PanelSkeleton rows={4} height="h-12" />;
   }
 
   if (error) {

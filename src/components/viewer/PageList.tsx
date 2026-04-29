@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, ExternalLink, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useNotionPages, type NotionPageRow } from "@/hooks/useNotionPages";
+import { PanelSearchRow, PanelSkeleton } from "./BrowsePanelKit";
 
 function PageExpandRow({ page }: { page: NotionPageRow }) {
   const [open, setOpen] = useState(false);
@@ -84,19 +84,20 @@ export function PageList({ connectorId }: PageListProps) {
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Input
-          placeholder="Search by page title…"
+        <PanelSearchRow
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="max-w-md"
-          aria-label="Search pages by title"
+          onChange={setQuery}
+          placeholder="Search by page title…"
+          count={filtered.length}
+          countLabel="page"
+          loading={isLoading}
         />
         <p className="text-xs text-muted-foreground">
           Tap the page name to read your backup (like Notion). Use ▸ for dates and the link to open in Notion.
         </p>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">Loading your pages…</p>}
+      {isLoading && <PanelSkeleton rows={5} height="h-10" />}
 
       {error && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">

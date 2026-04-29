@@ -52,13 +52,22 @@ export function registerStandardOAuthHandler(): void {
           webPreferences: {
             contextIsolation: true,
             nodeIntegration: false,
-            // sandbox: false is required so third-party OAuth consent pages
-            // (e.g. Todoist) can load their scripts and stylesheets correctly.
-            // The window only ever loads the platform's own consent page and is
-            // destroyed immediately after we intercept the callback redirect.
+            // sandbox: false lets third-party OAuth consent pages (e.g. Todoist)
+            // load all their scripts and service workers correctly. This window
+            // only ever shows a platform consent page and is destroyed immediately
+            // after we intercept the callback redirect.
             sandbox: false,
           },
         });
+
+        // Override the Electron user agent with a plain Chrome one.
+        // Many OAuth consent pages (Todoist, etc.) detect "Electron" in the UA
+        // and fail to bootstrap their SPA. Removing it makes the window look
+        // like a standard Chrome browser to the remote server.
+        const baseUA = win.webContents.getUserAgent();
+        win.webContents.setUserAgent(
+          baseUA.replace(/\s*Electron\/[\d.]+/, ""),
+        );
 
         let settled = false;
 
@@ -69,17 +78,55 @@ export function registerStandardOAuthHandler(): void {
           resolve(result);
         };
 
-        const onNavigate = (_e: Electron.Event, url: string) => {
-          if (!url.includes(callbackPath)) return;
+        // Intercept callback URL before the BrowserWindow makes the HTTP request.
+        // OAuth codes are single-use — if the BrowserWindow loads the callback URL,
+        // the Edge Function GET handler consumes the code first, and the Electron
+        // POST exchange below will fail with "Token exchange failed".
+        //
+        // Two separate event types are needed:
+        //   • will-navigate  — JS/user-initiated navigations (e.g. window.location = ...)
+        //   • will-redirect  — server-side HTTP 302 redirects (fires instead of will-navigate)
+        //
+        // Airtable's "Confirm redirect" button triggers a server-side redirect,
+        // so will-redirect is the critical one here. Both support preventDefault().
 
-          // Hide immediately — nothing useful to show.
+        // Returns true only when `url` is our callback page — not when our
+        // callback path merely appears as a query parameter inside another URL.
+        // For example, Airtable's "Confirm redirect" page URL looks like:
+        //   https://airtable.com/some-path?redirect_uri=https://...supabase.co/.../callback&code=...
+        // url.includes(callbackPath) would wrongly match that. Checking the
+        // parsed pathname ensures we only intercept the real callback navigation.
+        const isCallbackUrl = (url: string): boolean => {
+          try {
+            return new URL(url).pathname.includes(callbackPath);
+          } catch {
+            return false;
+          }
+        };
+
+        const interceptCallback = (e: Electron.Event, url: string) => {
+          if (!isCallbackUrl(url)) return;
+          // Block the BrowserWindow from making the HTTP GET to the callback URL.
+          // This ensures the auth code is only consumed once — by the POST exchange below.
+          e.preventDefault();
           if (!win.isDestroyed()) win.hide();
-
           void handleCallback(url, exchangeUrl, settle);
         };
 
-        win.webContents.on("did-navigate", onNavigate);
-        win.webContents.on("did-navigate-in-page", onNavigate);
+        // did-navigate fires AFTER the page has loaded — last-resort fallback only.
+        // By this point the code may already be consumed, but settled flag prevents
+        // resolving twice.
+        const onDidNavigate = (_e: Electron.Event, url: string) => {
+          if (!isCallbackUrl(url)) return;
+          if (!win.isDestroyed()) win.hide();
+          void handleCallback(url, exchangeUrl, settle);
+        };
+
+        win.webContents.on("will-navigate", interceptCallback);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        win.webContents.on("will-redirect", interceptCallback as any);
+        win.webContents.on("did-navigate", onDidNavigate);
+        win.webContents.on("did-navigate-in-page", onDidNavigate);
 
         win.on("closed", () => {
           settle({ success: false, error: "Window closed before completing OAuth.", cancelled: true });
