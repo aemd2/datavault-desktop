@@ -38,6 +38,8 @@ interface Platform {
   connectorType?: string;
   onConnect?: () => void | Promise<void>;
   note?: string;
+  /** Local-only connectors (e.g. Obsidian) don't use a cloud API and are always free. */
+  localOnly?: boolean;
 }
 
 const platforms: Platform[] = [
@@ -95,6 +97,7 @@ const platforms: Platform[] = [
     icon: FileText,
     status: "beta",
     connectorType: "obsidian",
+    localOnly: true,
     description: "Point at your local Obsidian vault folder — DataVault reads your notes right off disk. No cloud, no sync, no plugin.",
     note: "Obsidian has no cloud API, so this uses a native folder picker instead of an online login. Desktop app only.",
     onConnect: () => void startObsidianConnect(),
@@ -223,7 +226,14 @@ const PlatformsInner = () => {
 
                   {/* Name + description */}
                   <div className="flex-1 space-y-1">
-                    <h3 className="text-sm font-semibold">{p.name}</h3>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-sm font-semibold">{p.name}</h3>
+                      {p.localOnly && (
+                        <span className="text-[10px] font-medium text-emerald-400/90 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5">
+                          Always free · local only
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">{p.description}</p>
                     {p.note && (
                       <p className="text-xs text-amber-400/80 leading-relaxed mt-2 border-t border-amber-500/20 pt-2">

@@ -474,13 +474,18 @@ Deno.serve(async (req) => {
   // edge cases where a user downgrades after adding connectors.
   // Skip for internal auto-backup triggers (service-role already authenticated).
   if (!isInternal) {
+    // Obsidian is local-only — it never calls run-sync, but guard anyway.
+    // Count only CLOUD connectors (exclude obsidian) against the plan limit.
     const PLAN_LIMITS: Record<string, number> = { free: 1, managed: 3, enterprise: 9999 };
     const { data: subRow } = await admin
       .from("subscriptions").select("plan").eq("user_id", userId).maybeSingle();
     const plan = subRow?.plan ?? "free";
     const limit = PLAN_LIMITS[plan] ?? 1;
     const { count: connCount } = await admin
-      .from("connectors").select("id", { count: "exact", head: true }).eq("user_id", userId);
+      .from("connectors")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .neq("type", "obsidian");
     if ((connCount ?? 0) > limit) {
       return jsonResp({ error: "connector_limit_exceeded", plan, limit }, 403);
     }

@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { openExternalUrl } from "@/lib/marketingWeb";
 import { startNotionOAuth } from "@/lib/startNotionOAuth";
 import { startTrelloOAuth } from "@/lib/startTrelloOAuth";
@@ -40,21 +40,10 @@ import { startAirtableOAuth } from "@/lib/startAirtableOAuth";
 import { startGoogleSheetsOAuth } from "@/lib/startGoogleSheetsOAuth";
 import { startObsidianConnect } from "@/lib/startObsidianConnect";
 
-const FN_BASE = `${SUPABASE_URL}/functions/v1`;
-
 async function callFn(path: string, body: object) {
-  const { data } = await supabase.auth.getSession();
-  const jwt = data.session?.access_token ?? "";
-  const res = await fetch(`${FN_BASE}/${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${jwt}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? "Request failed");
-  }
-  return res.json();
+  const { data, error } = await supabase.functions.invoke(path, { body });
+  if (error) throw new Error(error.message || "Request failed");
+  return data;
 }
 
 // ─── Plan definitions ────────────────────────────────────────────────────────
@@ -89,13 +78,13 @@ const PLANS = [
 // ─── Platform definitions ─────────────────────────────────────────────────────
 
 const PLATFORMS = [
-  { id: "notion", name: "Notion", icon: Database, onConnect: () => void startNotionOAuth() },
-  { id: "trello", name: "Trello", icon: Kanban, onConnect: () => void startTrelloOAuth() },
-  { id: "todoist", name: "Todoist", icon: CheckSquare, onConnect: () => void startTodoistOAuth() },
-  { id: "asana", name: "Asana", icon: LayoutDashboard, onConnect: () => void startAsanaOAuth() },
-  { id: "airtable", name: "Airtable", icon: Table, onConnect: () => void startAirtableOAuth() },
-  { id: "google-sheets", name: "Google Sheets", icon: Sheet, onConnect: () => void startGoogleSheetsOAuth() },
-  { id: "obsidian", name: "Obsidian", icon: FileText, onConnect: () => void startObsidianConnect() },
+  { id: "notion", name: "Notion", icon: Database, localOnly: false, onConnect: () => void startNotionOAuth() },
+  { id: "trello", name: "Trello", icon: Kanban, localOnly: false, onConnect: () => void startTrelloOAuth() },
+  { id: "todoist", name: "Todoist", icon: CheckSquare, localOnly: false, onConnect: () => void startTodoistOAuth() },
+  { id: "asana", name: "Asana", icon: LayoutDashboard, localOnly: false, onConnect: () => void startAsanaOAuth() },
+  { id: "airtable", name: "Airtable", icon: Table, localOnly: false, onConnect: () => void startAirtableOAuth() },
+  { id: "google-sheets", name: "Google Sheets", icon: Sheet, localOnly: false, onConnect: () => void startGoogleSheetsOAuth() },
+  { id: "obsidian", name: "Obsidian", icon: FileText, localOnly: true, onConnect: () => void startObsidianConnect() },
 ] as const;
 
 // ─── Step indicator ──────────────────────────────────────────────────────────
@@ -357,12 +346,24 @@ function ConnectStep({ plan, onSkip }: { plan: string; onSkip: () => void }) {
               <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
                 <Icon className="w-4 h-4 text-primary" />
               </div>
-              <span className="text-sm font-medium text-foreground flex-1">{platform.name}</span>
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium text-foreground">{platform.name}</span>
+                {platform.localOnly && (
+                  <p className="text-[10px] text-emerald-400/80 leading-tight mt-0.5">
+                    Always free · local only
+                  </p>
+                )}
+              </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-primary transition-colors shrink-0" />
             </button>
           );
         })}
       </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        Cloud services count toward your plan limit.{" "}
+        <span className="text-emerald-400/90">Obsidian is always free</span> — it reads files locally, no API needed.
+      </p>
 
       <div className="flex justify-center">
         <Button variant="ghost" size="sm" onClick={onSkip} className="text-muted-foreground text-xs">

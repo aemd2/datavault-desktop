@@ -5,12 +5,9 @@ import { AppTopNav } from "@/components/AppTopNav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase, SUPABASE_URL } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useSubscription } from "@/hooks/useSubscription";
 import { openExternalUrl } from "@/lib/marketingWeb";
-
-/** Base URL for Supabase Edge Functions. */
-const FN_BASE = `${SUPABASE_URL}/functions/v1`;
 
 /**
  * Plan definitions aligned with PRD §5 (Free) and Phase 1 scope.
@@ -64,21 +61,9 @@ const PLANS = [
 
 /** Call an Edge Function with the current user JWT. Returns parsed JSON. */
 async function callFn(path: string, body: object) {
-  const { data } = await supabase.auth.getSession();
-  const jwt = data.session?.access_token ?? "";
-  const res = await fetch(`${FN_BASE}/${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${jwt}`,
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error ?? "Request failed");
-  }
-  return res.json();
+  const { data, error } = await supabase.functions.invoke(path, { body });
+  if (error) throw new Error(error.message || "Request failed");
+  return data;
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
