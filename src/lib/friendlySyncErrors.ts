@@ -21,11 +21,28 @@ function joinParts(err: unknown): { text: string; code: string } {
   return { text: String(err ?? ""), code: "" };
 }
 
+/**
+ * Plan-limit detector — the DB trigger raises an exception with this prefix
+ * when a Free user tries to insert a 2nd cloud connector. Reused by every
+ * caller that performs a `connectors` INSERT (OAuth flows, Obsidian connect).
+ */
+export function isConnectorLimitError(err: unknown): boolean {
+  const { text } = joinParts(err);
+  return text.toLowerCase().includes("connector_limit_exceeded");
+}
+
+/** Friendly copy for the connector limit error. */
+export function friendlyConnectorLimitError(): string {
+  return "You've hit your plan's connector limit. Disconnect one from your dashboard, or upgrade in Billing to add more. Obsidian is always free.";
+}
+
 /** When "Sync Now" insert into sync_jobs fails. */
 export function friendlyQueueSyncError(err: unknown, kind?: ConnectorKind): string {
   const { text, code } = joinParts(err);
   const lower = text.toLowerCase();
   const src = sourceLabel(kind);
+
+  if (lower.includes("connector_limit_exceeded")) return friendlyConnectorLimitError();
 
   if (!text || lower.includes("load failed") || lower.includes("failed to fetch") || lower.includes("network")) {
     return "We couldn’t reach the server. Check your internet connection, then try again.";

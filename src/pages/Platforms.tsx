@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -13,12 +13,16 @@ import {
   Check,
   ArrowLeft,
   FileText,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { AuthGuard } from "@/components/AuthGuard";
 import { AppTopNav } from "@/components/AppTopNav";
+import { ConnectorLimitDialog } from "@/components/ConnectorLimitDialog";
 import { useConnectors } from "@/hooks/useConnectors";
+import { useSubscription } from "@/hooks/useSubscription";
+import { friendlyConnectorLabel } from "@/lib/connectorDisplay";
 import type { LucideIcon } from "lucide-react";
 import { startNotionOAuth } from "@/lib/startNotionOAuth";
 import { startTrelloOAuth } from "@/lib/startTrelloOAuth";
@@ -27,6 +31,8 @@ import { startAsanaOAuth } from "@/lib/startAsanaOAuth";
 import { startAirtableOAuth } from "@/lib/startAirtableOAuth";
 import { startGoogleSheetsOAuth } from "@/lib/startGoogleSheetsOAuth";
 import { startObsidianConnect } from "@/lib/startObsidianConnect";
+
+const PLAN_LIMITS: Record<string, number> = { free: 1, managed: 3, enterprise: 9999 };
 
 type PlatformStatus = "live" | "beta" | "phase-3";
 
@@ -141,12 +147,46 @@ function StatusBadge({ status }: { status: PlatformStatus }) {
 const PlatformsInner = () => {
   const navigate = useNavigate();
   const { data: connectors = [] } = useConnectors();
+  const { data: subscription } = useSubscription();
+  const [limitOpen, setLimitOpen] = useState(false);
 
   const linkedByType = useMemo(() => {
     const m = new Map<string, (typeof connectors)[0]>();
     for (const c of connectors) m.set(c.type.toLowerCase(), c);
     return m;
   }, [connectors]);
+
+  // Plan-based gating: free users get 1 cloud connector, Obsidian is always free.
+  const plan = subscription?.plan ?? "free";
+  const limit = PLAN_LIMITS[plan] ?? 1;
+  const cloudConnectors = useMemo(
+    () => connectors.filter((c) => c.type !== "obsidian"),
+    [connectors],
+  );
+  const cloudCount = cloudConnectors.length;
+  const atLimit = cloudCount >= limit;
+  const existingCloudName = cloudConnectors[0]
+    ? friendlyConnectorLabel(cloudConnectors[0].type)
+    : undefined;
+  const planLabel = plan === "managed" ? "Managed" : plan === "enterprise" ? "Enterprise" : "Free";
+
+  /**
+   * Click handler used by every connector card. Obsidian is always free,
+   * already-linked connectors no-op, and additional cloud connectors over
+   * the plan limit open the upgrade/disconnect dialog.
+   */
+  const handleConnect = (p: Platform, isLinked: boolean) => {
+    if (isLinked) return; // Already connected
+    if (p.localOnly) {
+      void p.onConnect?.();
+      return;
+    }
+    if (atLimit) {
+      setLimitOpen(true);
+      return;
+    }
+    void p.onConnect?.();
+  };
 
   const available = platforms.filter((p) => p.status !== "phase-3");
   const comingSoon = platforms.filter((p) => p.status === "phase-3");
@@ -252,12 +292,22 @@ const PlatformsInner = () => {
                     >
                       Open vault
                     </Button>
+                  ) : atLimit && !p.localOnly ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full gap-1.5 text-amber-300/90 border-amber-500/30 hover:bg-amber-500/5 hover:text-amber-200"
+                      onClick={() => handleConnect(p, false)}
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      Upgrade to add
+                    </Button>
                   ) : (
                     <Button
                       size="sm"
                       variant={p.status === "live" ? "default" : "outline"}
                       className="w-full"
-                      onClick={() => void p.onConnect?.()}
+                      onClick={() => handleConnect(p, false)}
                     >
                       Connect {p.name}
                     </Button>
@@ -267,6 +317,19 @@ const PlatformsInner = () => {
             })}
           </div>
         </section>
+
+        {/* Plan-limit hint banner — shown when free user is at the limit. */}
+        {atLimit && (
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 flex items-start gap-3">
+            <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+            <div className="flex-1 text-xs text-amber-200/90 leading-relaxed">
+              You're on the <span className="font-semibold">{planLabel}</span> plan ({limit} cloud connection)
+              {existingCloudName ? <> with <span className="font-medium">{existingCloudName}</span> already connected</> : null}.
+              Disconnect it from the dashboard to switch, or upgrade to add more.{" "}
+              <span className="text-emerald-400/90">Obsidian is always free.</span>
+            </div>
+          </div>
+        )}
 
         {/* Coming soon */}
         <section className="space-y-4">
@@ -298,6 +361,14 @@ const PlatformsInner = () => {
         </section>
 
       </main>
+
+      <ConnectorLimitDialog
+        open={limitOpen}
+        onOpenChange={setLimitOpen}
+        currentConnectorName={existingCloudName}
+        planName={planLabel}
+        limit={limit}
+      />
     </div>
   );
 };

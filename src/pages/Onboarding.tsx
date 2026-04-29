@@ -1,9 +1,13 @@
 /**
  * Onboarding — shown to new users after their first login.
  *
- * Step 1: Choose a plan (Free / Managed / Enterprise)
- * Step 2: Choose where to save vault files (local folder picker)
- * Step 3: Add your first connection (pick a platform)
+ * Step 1: Choose where to save vault files (local folder picker)
+ * Step 2: Add your first connection (pick a platform)
+ *
+ * New users default to the Free plan. Plan upgrades happen later from the
+ * Billing page — this flow keeps onboarding focused on the two questions
+ * a fresh user actually needs answered: "where do my files live?" and
+ * "which app do I want to back up first?".
  *
  * Completion is tracked in localStorage ("onboarding_done").
  * App.tsx redirects here when: user is logged in + no connectors + not done.
@@ -12,7 +16,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { toast } from "sonner";
 import {
   Check,
   FolderOpen,
@@ -29,9 +32,6 @@ import {
   Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/lib/supabase";
-import { openExternalUrl } from "@/lib/marketingWeb";
 import { startNotionOAuth } from "@/lib/startNotionOAuth";
 import { startTrelloOAuth } from "@/lib/startTrelloOAuth";
 import { startTodoistOAuth } from "@/lib/startTodoistOAuth";
@@ -39,41 +39,10 @@ import { startAsanaOAuth } from "@/lib/startAsanaOAuth";
 import { startAirtableOAuth } from "@/lib/startAirtableOAuth";
 import { startGoogleSheetsOAuth } from "@/lib/startGoogleSheetsOAuth";
 import { startObsidianConnect } from "@/lib/startObsidianConnect";
-
-async function callFn(path: string, body: object) {
-  const { data, error } = await supabase.functions.invoke(path, { body });
-  if (error) throw new Error(error.message || "Request failed");
-  return data;
-}
-
-// ─── Plan definitions ────────────────────────────────────────────────────────
-
-const PLANS = [
-  {
-    id: "free",
-    name: "Free",
-    price: "€0",
-    period: "forever",
-    highlight: false,
-    features: ["1 connected service", "Manual sync", "Browse & search your backups", "Open-source"],
-  },
-  {
-    id: "managed",
-    name: "Managed",
-    price: "€20",
-    period: "/ month",
-    highlight: true,
-    features: ["Up to 3 connected services", "Weekly auto-backup", "Everything in Free"],
-  },
-  {
-    id: "enterprise",
-    name: "Enterprise",
-    price: "€80",
-    period: "/ month",
-    highlight: false,
-    features: ["Unlimited connections", "Priority support", "Everything in Managed"],
-  },
-] as const;
+import { useConnectors } from "@/hooks/useConnectors";
+import { useSubscription } from "@/hooks/useSubscription";
+import { ConnectorLimitDialog } from "@/components/ConnectorLimitDialog";
+import { friendlyConnectorLabel } from "@/lib/connectorDisplay";
 
 // ─── Platform definitions ─────────────────────────────────────────────────────
 
@@ -87,6 +56,8 @@ const PLATFORMS = [
   { id: "obsidian", name: "Obsidian", icon: FileText, localOnly: true, onConnect: () => void startObsidianConnect() },
 ] as const;
 
+const PLAN_LIMITS: Record<string, number> = { free: 1, managed: 3, enterprise: 9999 };
+
 // ─── Step indicator ──────────────────────────────────────────────────────────
 
 function StepDot({ step, current, done }: { step: number; current: number; done: boolean }) {
@@ -99,7 +70,7 @@ function StepDot({ step, current, done }: { step: number; current: number; done:
 }
 
 function StepBar({ current }: { current: number }) {
-  const labels = ["Choose plan", "Vault folder", "First connection"];
+  const labels = ["Vault folder", "First connection"];
   return (
     <div className="flex items-center gap-0 justify-center mb-10">
       {labels.map((label, i) => (
@@ -119,96 +90,7 @@ function StepBar({ current }: { current: number }) {
   );
 }
 
-// ─── Step 1: Plan selection ──────────────────────────────────────────────────
-
-function PlanStep({ onNext }: { onNext: (plan: string) => void }) {
-  const [selected, setSelected] = useState<string>("free");
-  const [loading, setLoading] = useState(false);
-
-  const handleContinue = async () => {
-    if (selected === "free") {
-      onNext("free");
-      return;
-    }
-    // Paid plan → open Stripe checkout
-    setLoading(true);
-    try {
-      const { url } = await callFn("create-checkout-session", { plan: selected });
-      await openExternalUrl(url);
-      // User will complete checkout in browser; we still advance them to step 2
-      // The webhook will update their plan. Onboarding continues optimistically.
-      onNext(selected);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Could not start checkout.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">Choose your plan</h1>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          Start free and upgrade anytime. You can change your plan from the Billing page.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {PLANS.map((plan) => (
-          <button
-            key={plan.id}
-            type="button"
-            onClick={() => setSelected(plan.id)}
-            className={`text-left rounded-xl border p-5 transition-all space-y-3
-              ${selected === plan.id
-                ? "border-primary bg-primary/5 ring-2 ring-primary/30"
-                : "border-border/60 bg-card/40 hover:border-primary/30 hover:bg-card/70"
-              }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <p className="text-sm font-semibold text-foreground">{plan.name}</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">
-                  {plan.price}
-                  <span className="text-xs font-normal text-muted-foreground"> {plan.period}</span>
-                </p>
-              </div>
-              {plan.highlight && (
-                <Badge className="text-[10px] shrink-0 bg-primary/15 text-primary border-primary/25">
-                  Popular
-                </Badge>
-              )}
-            </div>
-            <ul className="space-y-1">
-              {plan.features.map((f) => (
-                <li key={f} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                  <Check className="w-3 h-3 text-primary shrink-0 mt-0.5" />
-                  {f}
-                </li>
-              ))}
-            </ul>
-            {selected === plan.id && (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
-                <Check className="w-3.5 h-3.5" /> Selected
-              </div>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex justify-end">
-        <Button onClick={handleContinue} disabled={loading} size="lg" className="gap-2">
-          {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-          {selected === "free" ? "Continue with Free" : `Continue to checkout`}
-          <ChevronRight className="w-4 h-4" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// ─── Step 2: Vault folder ────────────────────────────────────────────────────
+// ─── Step 1: Vault folder ────────────────────────────────────────────────────
 
 function VaultStep({ onNext }: { onNext: (vaultPath: string) => void }) {
   const [chosenPath, setChosenPath] = useState<string | null>(null);
@@ -236,24 +118,13 @@ function VaultStep({ onNext }: { onNext: (vaultPath: string) => void }) {
     }
   };
 
-  const handleUseDefault = async () => {
-    // Save the default path so future reads use it
-    const picked = await window.electronAPI?.vault?.choosePath?.();
-    if (picked) {
-      setChosenPath(picked);
-    } else {
-      // Confirm with default suggestion
-      onNext(defaultPath);
-    }
-  };
-
   const displayPath = chosenPath ?? defaultPath;
   const isElectron = !!window.electronAPI?.vault?.choosePath;
 
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">Choose your vault folder</h1>
+        <h1 className="text-2xl font-bold text-foreground">Where should we save your data?</h1>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
           DataVault saves copies of your data as plain files on your computer — like Obsidian.
           Choose where to put them.
@@ -313,19 +184,48 @@ function VaultStep({ onNext }: { onNext: (vaultPath: string) => void }) {
   );
 }
 
-// ─── Step 3: First connection ─────────────────────────────────────────────────
+// ─── Step 2: First connection ─────────────────────────────────────────────────
 
-function ConnectStep({ plan, onSkip }: { plan: string; onSkip: () => void }) {
+function ConnectStep({ onSkip }: { onSkip: () => void }) {
   const navigate = useNavigate();
-  const limit = plan === "enterprise" ? 99 : plan === "managed" ? 3 : 1;
-  const limitLabel = limit === 1 ? "1 connection on your plan" : `Up to ${limit} connections on your plan`;
+  const { data: connectors = [] } = useConnectors();
+  const { data: subscription } = useSubscription();
+  const [limitOpen, setLimitOpen] = useState(false);
+
+  const plan = subscription?.plan ?? "free";
+  const limit = PLAN_LIMITS[plan] ?? 1;
+  // Cloud connectors only — Obsidian is local-only and always free.
+  const cloudConnectors = connectors.filter((c) => c.type !== "obsidian");
+  const cloudCount = cloudConnectors.length;
+  const atLimit = cloudCount >= limit;
+  const existingCloudName = cloudConnectors[0]
+    ? friendlyConnectorLabel(cloudConnectors[0].type)
+    : undefined;
+
+  const handlePlatformClick = (platform: typeof PLATFORMS[number]) => {
+    // Obsidian is always free — never gated.
+    if (platform.localOnly) {
+      platform.onConnect();
+      setTimeout(() => navigate("/dashboard"), 500);
+      return;
+    }
+    // Block cloud connectors when the user already has one on Free.
+    if (atLimit) {
+      setLimitOpen(true);
+      return;
+    }
+    platform.onConnect();
+    setTimeout(() => navigate("/dashboard"), 500);
+  };
 
   return (
     <div className="space-y-6">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-foreground">Add your first connection</h1>
+        <h1 className="text-2xl font-bold text-foreground">Pick your first app</h1>
         <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          Connect a service and DataVault will back it up to your vault folder. {limitLabel}.
+          You're on the <span className="font-medium text-foreground">Free plan</span> — connect{" "}
+          <span className="font-medium text-foreground">1 cloud app</span>.{" "}
+          <span className="text-emerald-400/90">Obsidian is always free</span> on top of any plan.
         </p>
       </div>
 
@@ -336,11 +236,7 @@ function ConnectStep({ plan, onSkip }: { plan: string; onSkip: () => void }) {
             <button
               key={platform.id}
               type="button"
-              onClick={() => {
-                platform.onConnect();
-                // After a short delay, navigate to dashboard (OAuth will redirect back)
-                setTimeout(() => navigate("/dashboard"), 500);
-              }}
+              onClick={() => handlePlatformClick(platform)}
               className="flex items-center gap-3 rounded-xl border border-border/60 bg-card/40 hover:bg-card/80 hover:border-primary/30 transition-all px-4 py-4 text-left group"
             >
               <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center shrink-0">
@@ -370,6 +266,14 @@ function ConnectStep({ plan, onSkip }: { plan: string; onSkip: () => void }) {
           I'll add a connection later → go to dashboard
         </Button>
       </div>
+
+      <ConnectorLimitDialog
+        open={limitOpen}
+        onOpenChange={setLimitOpen}
+        currentConnectorName={existingCloudName}
+        planName={plan === "managed" ? "Managed" : plan === "enterprise" ? "Enterprise" : "Free"}
+        limit={limit}
+      />
     </div>
   );
 }
@@ -379,7 +283,6 @@ function ConnectStep({ plan, onSkip }: { plan: string; onSkip: () => void }) {
 export default function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [chosenPlan, setChosenPlan] = useState("free");
 
   const finish = () => {
     localStorage.setItem("onboarding_done", "1");
@@ -410,20 +313,12 @@ export default function Onboarding() {
               transition={{ duration: 0.25 }}
             >
               {step === 1 && (
-                <PlanStep
-                  onNext={(plan) => {
-                    setChosenPlan(plan);
-                    setStep(2);
-                  }}
+                <VaultStep
+                  onNext={(_path) => setStep(2)}
                 />
               )}
               {step === 2 && (
-                <VaultStep
-                  onNext={(_path) => setStep(3)}
-                />
-              )}
-              {step === 3 && (
-                <ConnectStep plan={chosenPlan} onSkip={finish} />
+                <ConnectStep onSkip={finish} />
               )}
             </motion.div>
           </AnimatePresence>
