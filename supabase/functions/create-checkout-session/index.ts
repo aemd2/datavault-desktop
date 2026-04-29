@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     customerId = sub?.stripe_customer_id ?? null;
 
     if (!customerId) {
-      // Create a new Stripe customer
+      // Create a new Stripe customer — metadata keys must be individual fields
       const custRes = await fetch("https://api.stripe.com/v1/customers", {
         method: "POST",
         headers: {
@@ -79,11 +79,11 @@ Deno.serve(async (req) => {
         },
         body: new URLSearchParams({
           email: user.email ?? "",
-          metadata: JSON.stringify({ supabase_user_id: user.id }),
+          "metadata[supabase_user_id]": user.id,
         }),
       });
       const cust = await custRes.json();
-      if (!custRes.ok) throw new Error(cust.error?.message ?? "Failed to create Stripe customer");
+      if (!custRes.ok) throw new Error(`Stripe customer error: ${cust.error?.message ?? JSON.stringify(cust)}`);
       customerId = cust.id;
 
       // Upsert subscription row with customer ID
@@ -96,9 +96,11 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Success/cancel URLs — deep link back into Electron app
-    const frontendUrl = Deno.env.get("FRONTEND_URL") ?? "datavault://dashboard";
-    const successUrl = `${frontendUrl}?checkout=success`;
+    // Success/cancel URLs — Stripe requires HTTPS URLs (custom schemes like datavault:// are rejected).
+    // We use a simple Supabase redirect page, or fall back to a hosted page.
+    // The Stripe webhook handles the real plan update regardless of where the user lands.
+    const frontendUrl = Deno.env.get("FRONTEND_URL") ?? `${Deno.env.get("SUPABASE_URL")}/checkout-complete`;
+    const successUrl = `${frontendUrl}?checkout=success&plan=${plan}`;
     const cancelUrl = `${frontendUrl}?checkout=canceled`;
 
     // Create Checkout Session
@@ -122,7 +124,7 @@ Deno.serve(async (req) => {
       }),
     });
     const session = await sessionRes.json();
-    if (!sessionRes.ok) throw new Error(session.error?.message ?? "Failed to create checkout session");
+    if (!sessionRes.ok) throw new Error(`Stripe session error: ${session.error?.message ?? JSON.stringify(session)}`);
 
     return new Response(JSON.stringify({ url: session.url }), {
       status: 200,
