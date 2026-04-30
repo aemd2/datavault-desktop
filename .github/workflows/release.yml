@@ -20,11 +20,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build renderer (Vite)
-        run: npm run build
-
-      - name: Compile Electron main process
-        run: npx tsc -p tsconfig.electron.json
+      - name: Build renderer + Electron main (writes dist-electron/package.json)
+        run: npm run build:electron
 
       - name: Build Windows installer
         run: npx electron-builder --win --publish never
@@ -50,11 +47,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build renderer (Vite)
-        run: npm run build
-
-      - name: Compile Electron main process
-        run: npx tsc -p tsconfig.electron.json
+      - name: Build renderer + Electron main (writes dist-electron/package.json)
+        run: npm run build:electron
 
       - name: Build macOS DMG
         run: npx electron-builder --mac --publish never

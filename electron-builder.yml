@@ -20,6 +20,16 @@ extraResources:
 
 asar: true
 
+# Override package.json fields baked into the asar. Without this, the root
+# package.json (which has "type": "module" because Vite needs it) leaks into
+# the packaged app and Node's ESM loader rejects the compiled CommonJS
+# main process with "ReferenceError: exports is not defined". Forcing
+# "type: commonjs" here keeps Vite happy at build time and Electron happy
+# at runtime.
+extraMetadata:
+  type: commonjs
+  main: dist-electron/main.js
+
 win:
   target:
     - target: nsis
